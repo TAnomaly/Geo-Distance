@@ -9,6 +9,7 @@ LIBS_API = -lpq -lm -ljson-c -lmicrohttpd
 # Directories
 SRC_DIR = src
 BUILD_DIR = build
+WEB_DIR = web
 
 # Executable names
 TARGET_LOGGER = coordinate_logger
@@ -34,9 +35,14 @@ $(TARGET_LOGGER): $(SRCS_LOGGER_LIB) $(SRCS_LOGGER_MAIN)
 $(TARGET_API): $(SRCS_API)
 	$(CC) $(CFLAGS) -o $(BUILD_DIR)/$@ $^ $(LIBS_API)
 
+# Install web files
+install-web:
+	mkdir -p $(BUILD_DIR)/web
+	cp -r $(WEB_DIR)/* $(BUILD_DIR)/web/
+
 # Clean build artifacts
 clean:
 	rm -rf $(BUILD_DIR)
 
 # Phony targets
-.PHONY: all clean
+.PHONY: all clean install-web

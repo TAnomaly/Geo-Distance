@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coordinate Map</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+        
+        .info-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            max-width: 300px;
+        }
+        
+        .info-panel h3 {
+            margin-top: 0;
+        }
+        
+        .coordinates-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .coordinate-item {
+            padding: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .coordinate-item:last-child {
+            border-bottom: none;
+        }
+        
+        .distance {
+            font-weight: bold;
+            color: #007acc;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="info-panel">
+        <h3>Coordinate Data</h3>
+        <div id="coordinates-info">
+            <p>Loading coordinates...</p>
+        </div>
+        <button id="refresh-btn">Refresh Data</button>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // Initialize the map
+        const map = L.map('map').setView([0, 0], 2);
+        
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        
+        // Store markers
+        const markers = [];
+        
+        // Function to load coordinates from API
+        async function loadCoordinates() {
+            try {
+                const response = await fetch('/api/coordinates');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                updateMap(data);
+                updateInfoPanel(data);
+            } catch (error) {
+                console.error('Error loading coordinates:', error);
+                document.getElementById('coordinates-info').innerHTML = 
+                    '<p>Error loading data. Is the server running?</p>';
+            }
+        }
+        
+        // Function to update the map with new coordinates
+        function updateMap(coordinates) {
+            // Clear existing markers
+            markers.forEach(marker => map.removeLayer(marker));
+            markers.length = 0;
+            
+            // Add new markers
+            coordinates.forEach(coord => {
+                // Add marker for first location
+                const marker1 = L.marker([coord.first_lat, coord.first_lon])
+                    .addTo(map)
+                    .bindPopup(`<b>${coord.first_name}</b><br>(${coord.first_lat}, ${coord.first_lon})`);
+                markers.push(marker1);
+                
+                // Add marker for second location
+                const marker2 = L.marker([coord.second_lat, coord.second_lon])
+                    .addTo(map)
+                    .bindPopup(`<b>${coord.second_name}</b><br>(${coord.second_lat}, ${coord.second_lon})`);
+                markers.push(marker2);
+                
+                // Draw a line between the two points
+                const polyline = L.polyline([
+                    [coord.first_lat, coord.first_lon],
+                    [coord.second_lat, coord.second_lon]
+                ], {color: 'blue'}).addTo(map);
+                markers.push(polyline);
+            });
+            
+            // Fit map to bounds if we have markers
+            if (markers.length > 0) {
+                const group = new L.featureGroup(markers.filter(m => m instanceof L.Marker));
+                map.fitBounds(group.getBounds().pad(0.1));
+            }
+        }
+        
+        // Function to update the info panel
+        function updateInfoPanel(coordinates) {
+            const infoDiv = document.getElementById('coordinates-info');
+            
+            if (coordinates.length === 0) {
+                infoDiv.innerHTML = '<p>No coordinates found in database.</p>';
+                return;
+            }
+            
+            let html = `<p>Showing ${coordinates.length} coordinate pairs:</p>`;
+            html += '<div class="coordinates-list">';
+            
+            coordinates.forEach(coord => {
+                html += `
+                    <div class="coordinate-item">
+                        <div><b>${coord.first_name}</b> to <b>${coord.second_name}</b></div>
+                        <div class="distance">Distance: ${coord.distance.toFixed(2)} km</div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            infoDiv.innerHTML = html;
+        }
+        
+        // Event listener for refresh button
+        document.getElementById('refresh-btn').addEventListener('click', loadCoordinates);
+        
+        // Load coordinates when page loads
+        window.addEventListener('load', loadCoordinates);
+        
+        // Refresh data every 30 seconds
+        setInterval(loadCoordinates, 30000);
+    </script>
+</body>
+</html>

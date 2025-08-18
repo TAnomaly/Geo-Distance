@@ -1,6 +1,91 @@
 #include "api.h"
 #include "coordinate_logger.h"
 #include <json-c/json.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <libgen.h>
+
+// Helper function to read file content
+char* read_file_content(const char *filepath) {
+    FILE *file = fopen(filepath, "rb");
+    if (!file) {
+        return NULL;
+    }
+    
+    fseek(file, 0, SEEK_END);
+    long length = ftell(file);
+    fseek(file, 0, SEEK_SET);
+    
+    char *content = malloc(length + 1);
+    if (!content) {
+        fclose(file);
+        return NULL;
+    }
+    
+    fread(content, 1, length, file);
+    content[length] = '\0';
+    fclose(file);
+    
+    return content;
+}
+
+// Helper function to get content type based on file extension
+const char* get_content_type(const char *url) {
+    const char *dot = strrchr(url, '.');
+    if (!dot) return "text/plain";
+    
+    if (strcmp(dot, ".html") == 0) return "text/html";
+    if (strcmp(dot, ".css") == 0) return "text/css";
+    if (strcmp(dot, ".js") == 0) return "application/javascript";
+    if (strcmp(dot, ".json") == 0) return "application/json";
+    if (strcmp(dot, ".png") == 0) return "image/png";
+    if (strcmp(dot, ".jpg") == 0) return "image/jpeg";
+    if (strcmp(dot, ".gif") == 0) return "image/gif";
+    
+    return "text/plain";
+}
+
+// Function to retrieve coordinates from database
+json_object* get_coordinates_from_db() {
+    PGconn *conn = PQconnectdb(CONN_STR);
+    if (PQstatus(conn) != CONNECTION_OK) {
+        fprintf(stderr, "Database connection failed: %s", PQerrorMessage(conn));
+        PQfinish(conn);
+        return NULL;
+    }
+    
+    const char *query = "SELECT first_name, first_lat, first_lon, second_name, second_lat, second_lon, distance FROM coordinates ORDER BY id DESC LIMIT 100;";
+    PGresult *res = PQexec(conn, query);
+    
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "Query failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        PQfinish(conn);
+        return NULL;
+    }
+    
+    int rows = PQntuples(res);
+    json_object *coordinates_array = json_object_new_array();
+    
+    for (int i = 0; i < rows; i++) {
+        json_object *coord_obj = json_object_new_object();
+        
+        json_object_object_add(coord_obj, "first_name", json_object_new_string(PQgetvalue(res, i, 0)));
+        json_object_object_add(coord_obj, "first_lat", json_object_new_double(atof(PQgetvalue(res, i, 1))));
+        json_object_object_add(coord_obj, "first_lon", json_object_new_double(atof(PQgetvalue(res, i, 2))));
+        json_object_object_add(coord_obj, "second_name", json_object_new_string(PQgetvalue(res, i, 3)));
+        json_object_object_add(coord_obj, "second_lat", json_object_new_double(atof(PQgetvalue(res, i, 4))));
+        json_object_object_add(coord_obj, "second_lon", json_object_new_double(atof(PQgetvalue(res, i, 5))));
+        json_object_object_add(coord_obj, "distance", json_object_new_double(atof(PQgetvalue(res, i, 6))));
+        
+        json_object_array_add(coordinates_array, coord_obj);
+    }
+    
+    PQclear(res);
+    PQfinish(conn);
+    
+    return coordinates_array;
+}
 
 // Handle HTTP requests
 enum MHD_Result handle_request(void *cls __attribute__((unused)), struct MHD_Connection *connection,
@@ -11,6 +96,83 @@ enum MHD_Result handle_request(void *cls __attribute__((unused)), struct MHD_Con
     // Debug print
     printf("Received request: %s %s\n", method, url);
     fflush(stdout);
+    
+    // Handle GET requests for web files
+    if (strcmp(method, "GET") == 0) {
+        // Serve index.html for root path
+        if (strcmp(url, "/") == 0) {
+            char filepath[512];
+            snprintf(filepath, sizeof(filepath), "%s/index.html", WEB_ROOT);
+            
+            char *content = read_file_content(filepath);
+            if (!content) {
+                const char *error_msg = "{\"error\": \"File not found\"}";
+                struct MHD_Response *response = MHD_create_response_from_buffer(strlen(error_msg), 
+                                                                               (void *)error_msg, 
+                                                                               MHD_RESPMEM_MUST_COPY);
+                enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_NOT_FOUND, response);
+                MHD_destroy_response(response);
+                return ret;
+            }
+            
+            struct MHD_Response *response = MHD_create_response_from_buffer(strlen(content), 
+                                                                           (void *)content, 
+                                                                           MHD_RESPMEM_MUST_FREE);
+            MHD_add_response_header(response, "Content-Type", "text/html");
+            enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
+            MHD_destroy_response(response);
+            return ret;
+        }
+        
+        // Serve coordinates API endpoint
+        if (strcmp(url, "/api/coordinates") == 0) {
+            json_object *coordinates = get_coordinates_from_db();
+            if (!coordinates) {
+                const char *error_msg = "{\"error\": \"Failed to retrieve coordinates\"}";
+                struct MHD_Response *response = MHD_create_response_from_buffer(strlen(error_msg), 
+                                                                               (void *)error_msg, 
+                                                                               MHD_RESPMEM_MUST_COPY);
+                enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_INTERNAL_SERVER_ERROR, response);
+                MHD_destroy_response(response);
+                return ret;
+            }
+            
+            const char *json_str = json_object_to_json_string(coordinates);
+            struct MHD_Response *response = MHD_create_response_from_buffer(strlen(json_str), 
+                                                                           (void *)json_str, 
+                                                                           MHD_RESPMEM_MUST_COPY);
+            MHD_add_response_header(response, "Content-Type", "application/json");
+            enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
+            MHD_destroy_response(response);
+            json_object_put(coordinates);
+            return ret;
+        }
+        
+        // Serve static files from web directory
+        if (strncmp(url, "/web/", 5) == 0) {
+            char filepath[512];
+            snprintf(filepath, sizeof(filepath), "%s%s", WEB_ROOT, url + 4); // Remove /web prefix
+            
+            char *content = read_file_content(filepath);
+            if (!content) {
+                const char *error_msg = "{\"error\": \"File not found\"}";
+                struct MHD_Response *response = MHD_create_response_from_buffer(strlen(error_msg), 
+                                                                               (void *)error_msg, 
+                                                                               MHD_RESPMEM_MUST_COPY);
+                enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_NOT_FOUND, response);
+                MHD_destroy_response(response);
+                return ret;
+            }
+            
+            struct MHD_Response *response = MHD_create_response_from_buffer(strlen(content), 
+                                                                           (void *)content, 
+                                                                           MHD_RESPMEM_MUST_FREE);
+            MHD_add_response_header(response, "Content-Type", get_content_type(url));
+            enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
+            MHD_destroy_response(response);
+            return ret;
+        }
+    }
     
     // Only accept POST requests to /calculate-distance
     if (strcmp(method, "POST") != 0 || strcmp(url, "/calculate-distance") != 0) {
@@ -121,6 +283,8 @@ int main() {
 
     printf("Server running on port %d\n", PORT);
     printf("POST requests to http://localhost:%d/calculate-distance\n", PORT);
+    printf("Map UI available at http://localhost:%d/\n", PORT);
+    printf("API endpoint for coordinates: http://localhost:%d/api/coordinates\n", PORT);
     printf("Example JSON payload:\n");
     printf("{\n");
     printf("  \"name1\": \"Istanbul\",\n");
