@@ -1,307 +1,264 @@
-# Coordinate Distance Calculator with H3 Indexing
+# Location Sharing System - Modular Architecture
 
-A C-based REST API and CLI tool to calculate the distance between two geographic coordinates using the Haversine formula. Results are stored in a PostgreSQL database with H3 spatial indexing for advanced geospatial operations.
+A comprehensive location-sharing and route-finding system that uses Uber H3 Algorithm, Kring, and A* pathfinding to help friends share live locations and find optimal routes.
 
-## Features
+## 🏗️ Architecture Overview
 
-- Calculate distance between two geographic points (km)
-- Store results in PostgreSQL with H3 spatial indexing
-- Interactive map visualization using Leaflet.js
-- REST API interface for programmatic access
-- CLI interface for interactive terminal usage
-- Real-time map updates with coordinate visualization
-
-## Tech Stack
-
-- **Language**: C (ISO C99)
-- **Web Framework**: libmicrohttpd (for REST API)
-- **Database**: PostgreSQL
-- **Spatial Indexing**: H3 (Uber's Hexagonal Hierarchical Spatial Index)
-- **JSON Library**: json-c
-- **Map Visualization**: Leaflet.js with OpenStreetMap
-- **Build System**: Make
-
-## Project Structure
+The system has been reorganized into a clean, modular architecture following the principle of separation of concerns:
 
 ```
 prof/
-├── Makefile
 ├── src/
-│   ├── api_server.c       # HTTP server implementation
-│   ├── cli_main.c         # CLI entry point
-│   ├── coordinate_logger.c # Core logic (Haversine + DB + H3)
-│   ├── coordinate_logger.h # Function declarations
-│   └── api.h              # API headers
-├── web/
-│   └── index.html         # Map UI interface
-├── build/
-│   ├── coordinate_logger  # CLI executable
-│   └── api_server         # API executable
-├── migrate_h3.sql         # Database migration script
-└── README.md
+│   ├── main.c                    # Main entry point
+│   ├── api_server.h              # API server interface
+│   ├── api_server_new.c          # Clean HTTP server implementation
+│   ├── api.h                     # Configuration and constants
+│   ├── coordinate_logger.c       # Coordinate logging utilities
+│   ├── coordinate_logger.h       # Coordinate logging interface
+│   ├── auth/                     # Authentication module
+│   │   ├── auth.h               # Authentication interface
+│   │   └── auth.c               # User management & authentication
+│   ├── location/                 # Location management module
+│   │   ├── location.h           # Location interface
+│   │   └── location.c           # Location operations & H3 integration
+│   ├── routing/                  # Route finding module
+│   │   ├── routing.h            # Routing interface
+│   │   ├── routing.c            # Route calculation algorithms
+│   │   ├── h3_routing.c         # H3-based routing (future)
+│   │   ├── astar_routing.c      # A* algorithm (future)
+│   │   └── kring_routing.c      # Kring algorithm (future)
+│   └── utils/                    # Utility functions
+│       ├── utils.h              # Utilities interface
+│       └── utils.c              # Common utilities
+├── web/                          # Frontend files
+│   ├── index.html
+│   ├── style.css
+│   └── script.js
+├── build/                        # Build output directory
+├── Makefile_new                  # Build system for modular structure
+├── schema.sql                    # Database schema
+└── README_NEW_STRUCTURE.md       # This file
 ```
 
-## Database Schema
+## 🚀 Key Features
 
-```sql
-CREATE TABLE coordinates (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    first_name VARCHAR(100),
-    first_lat DOUBLE PRECISION,
-    first_lon DOUBLE PRECISION,
-    first_h3 VARCHAR(16),
-    second_name VARCHAR(100),
-    second_lat DOUBLE PRECISION,
-    second_lon DOUBLE PRECISION,
-    second_h3 VARCHAR(16),
-    distance DOUBLE PRECISION
-);
-```
+### Core Functionality
+- **User Authentication**: Secure registration, login, and session management
+- **Location Sharing**: Real-time location updates with H3 geospatial indexing
+- **Friend Management**: Add friends and view their locations
+- **Route Finding**: Multiple algorithms for optimal path calculation
+- **Distance Calculation**: H3 and A* based distance measurements
 
-## Prerequisites
+### Algorithms Implemented
+1. **Uber H3 Algorithm**: Geospatial indexing for efficient location queries
+2. **A* Pathfinding**: Optimal route calculation between points
+3. **Kring Algorithm**: Finding nearby places and points of interest
+4. **Haversine Distance**: Accurate distance calculations on Earth's surface
 
-Before building and running the application, ensure you have the following dependencies installed:
+## 🛠️ Installation & Setup
 
-- **PostgreSQL** (`postgresql`, `postgresql-contrib`)
-- **PostgreSQL Development Libraries** (`libpq-dev`)
-- **libmicrohttpd** (`libmicrohttpd-dev`)
-- **json-c** (`libjson-c-dev`)
-- **H3 Library** (`libh3-dev` or build from source)
-- **GCC** (or another C99 compatible compiler)
-- **Make**
+### Prerequisites
+- GCC compiler
+- PostgreSQL database
+- Required libraries (see dependencies below)
 
-### Installing Dependencies on Ubuntu/Debian:
-
+### Dependencies
 ```bash
-# Update package list
-sudo apt update
+# Ubuntu/Debian
+sudo apt-get install libmicrohttpd-dev libjson-c-dev libpq-dev libssl-dev libh3-dev
 
-# Install PostgreSQL and development libraries
-sudo apt install postgresql postgresql-contrib libpq-dev
-
-# Install project dependencies
-sudo apt install libmicrohttpd-dev libjson-c-dev build-essential
-
-# Install H3 library
-# Option 1: Install from package manager (if available)
-sudo apt install libh3-dev
-
-# Option 2: Build from source
-git clone https://github.com/uber/h3.git
-cd h3
-cmake -DBUILD_SHARED_LIBS=ON .
-make
-sudo make install
+# CentOS/RHEL/Fedora
+sudo yum install libmicrohttpd-devel json-c-devel postgresql-devel openssl-devel h3-devel
 ```
 
-## Database Setup
-
-1. Start PostgreSQL service:
+### Build Instructions
 ```bash
-sudo systemctl start postgresql
+# Clone and navigate to project
+cd prof
+
+# Install dependencies
+make -f Makefile_new install-deps
+
+# Build the application
+make -f Makefile_new
+
+# Run the application
+make -f Makefile_new run
 ```
 
-2. Create database and user:
+## 📊 Database Setup
+
+1. Create a PostgreSQL database
+2. Run the schema file:
 ```bash
-sudo -u postgres createuser myuser
-sudo -u postgres createdb mydb
-sudo -u postgres psql -c "ALTER USER myuser WITH PASSWORD 'mypassword';"
-sudo -u postgres psql -c "ALTER USER myuser WITH SUPERUSER;"
+psql -d your_database_name -f schema.sql
 ```
 
-3. Create the coordinates table:
-```bash
-psql "host=localhost dbname=mydb user=myuser password=mypassword" -c "
-CREATE TABLE coordinates (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    first_name VARCHAR(100),
-    first_lat DOUBLE PRECISION,
-    first_lon DOUBLE PRECISION,
-    first_h3 VARCHAR(16),
-    second_name VARCHAR(100),
-    second_lat DOUBLE PRECISION,
-    second_lon DOUBLE PRECISION,
-    second_h3 VARCHAR(16),
-    distance DOUBLE PRECISION
-);"
-```
-
-## Build Instructions
-
-```bash
-# Clean previous builds
-make clean
-
-# Build both executables
-make
-
-# Install web files (optional, for map UI)
-make install-web
-```
-
-## Usage
-
-### Start API Server
-
-```bash
-./build/api_server
-```
-
-After starting, the server will display:
-```
-Server running on port 8080
-POST requests to http://localhost:8080/calculate-distance
-Map UI available at http://localhost:8080/
-API endpoint for coordinates: http://localhost:8080/api/coordinates
-```
-
-### Use CLI Interface
-
-```bash
-./build/coordinate_logger
-```
-
-The CLI will prompt for two locations with their names and coordinates.
-
-### API Endpoints
-
-#### POST `/calculate-distance`
-
-Calculate the distance between two geographic points and store in database.
-
-##### Request Body (JSON)
-
-```json
-{
-  "name1": "Istanbul",
-  "lat1": 41.0151,
-  "lon1": 28.9795,
-  "name2": "Ankara",
-  "lat2": 39.9334,
-  "lon2": 32.8597
-}
-```
-
-##### Response (JSON)
-
-```json
-{
-  "distance": 419.45,
-  "unit": "km"
-}
-```
-
-#### GET `/`
-
-Serve the interactive map interface for visualizing coordinate data.
-
-#### GET `/api/coordinates`
-
-Retrieve all stored coordinate pairs with their H3 indices.
-
-##### Response (JSON)
-
-```json
-[
-  {
-    "first_name": "Istanbul",
-    "first_lat": 41.0151,
-    "first_lon": 28.9795,
-    "first_h3": "891ec90243bffff",
-    "second_name": "Ankara",
-    "second_lat": 39.9334,
-    "second_lon": 32.8597,
-    "second_h3": "891e9462833ffff",
-    "distance": 419.45
-  }
-]
-```
-
-### Testing with cURL
-
-```bash
-curl -X POST http://localhost:8080/calculate-distance \
-  -H "Content-Type: application/json" \
-  -d '{ "name1": "Istanbul", "lat1": 41.0151, "lon1": 28.9795, "name2": "Ankara", "lat2": 39.9334, "lon2": 32.8597 }'
-```
-
-### Map Interface
-
-Navigate to `http://localhost:8080/` in your browser to view the interactive map interface. The map will:
-
-1. Display markers for each coordinate pair
-2. Show lines connecting the pairs
-3. Display location names and H3 indices in popups
-4. Show a panel with all coordinate data
-5. Auto-refresh data every 30 seconds
-
-## H3 Spatial Indexing
-
-This project uses Uber's H3 library for spatial indexing. H3 provides:
-
-- Hierarchical spatial indexing system
-- Hexagonal grid tiling
-- Fast spatial operations
-- Consistent cell sizes
-
-When coordinates are stored, the system automatically calculates and stores their H3 indices at resolution 9. These indices can be used for:
-
-- Fast spatial lookups
-- Proximity searches
-- Spatial joins
-- Geofencing operations
-
-## Troubleshooting
-
-### Database Connection Issues
-
-If you encounter database connection errors:
-
-1. Verify PostgreSQL is running:
-```bash
-sudo systemctl status postgresql
-```
-
-2. Check connection string in `src/api.h`:
+3. Update the connection string in `src/api.h`:
 ```c
-#define CONN_STR "host=localhost dbname=mydb user=myuser password=mypassword"
+#define CONN_STR "host=localhost dbname=your_database_name user=your_username password=your_password"
 ```
 
-3. Test connection manually:
+## 🔌 API Endpoints
+
+### Authentication
+- `POST /api/register` - User registration
+- `POST /api/login` - User login
+- `POST /api/logout` - User logout
+- `GET /api/user` - Get user information
+
+### Location Management
+- `POST /api/save-location` - Save user location
+- `GET /api/friends/locations` - Get friends' locations
+
+### Social Features
+- `POST /api/add-friend` - Add a friend
+- `GET /api/friends` - Get friends list
+
+### Route Finding
+- `GET /api/route` - Calculate route between points
+- `GET /api/distance/h3` - H3 distance calculation
+- `GET /api/distance/astar` - A* distance calculation
+
+### Legacy Support
+- `POST /calculate-distance` - Legacy distance calculation endpoint
+
+## 🧩 Module Details
+
+### Authentication Module (`auth/`)
+- **Purpose**: User management and session handling
+- **Key Functions**:
+  - `register_user()` - Create new user accounts
+  - `login_user()` - Authenticate users
+  - `validate_session_token()` - Verify session validity
+  - `add_friend()` - Manage friend relationships
+
+### Location Module (`location/`)
+- **Purpose**: Location storage and retrieval with H3 integration
+- **Key Functions**:
+  - `save_user_location()` - Store user locations with H3 indexing
+  - `get_friends_locations_from_db()` - Retrieve friends' locations
+  - `calculate_h3_distance()` - H3-based distance calculation
+  - `calculate_astar_distance()` - A* pathfinding distance
+
+### Routing Module (`routing/`)
+- **Purpose**: Route calculation and pathfinding algorithms
+- **Key Functions**:
+  - `calculate_route()` - Main route calculation function
+  - `find_nearby_places()` - Kring-based nearby place discovery
+  - `get_kring_cells()` - Generate H3 kring cells
+
+### Utilities Module (`utils/`)
+- **Purpose**: Common utility functions
+- **Key Functions**:
+  - `read_file_content()` - File reading utilities
+  - `create_json_response()` - HTTP response helpers
+  - `queue_response_with_cors()` - CORS handling
+
+## 🔧 Configuration
+
+### Environment Variables
+Set these in `src/api.h`:
+```c
+#define PORT 8080                    // Server port
+#define WEB_ROOT "./web"             // Web files directory
+#define CONN_STR "your_db_connection_string"
+```
+
+### H3 Configuration
+- **Resolution**: Currently set to 9 (adjustable in location.c)
+- **Indexing**: Automatic H3 index generation for all locations
+- **Distance**: H3-based distance calculations for efficiency
+
+## 🚀 Usage Examples
+
+### Register a New User
 ```bash
-psql "host=localhost dbname=mydb user=myuser password=mypassword"
+curl -X POST http://localhost:8080/api/register \
+  -H "Content-Type: application/json" \
+  -d '{"username": "john_doe", "password": "secure_password"}'
 ```
 
-### H3 Library Issues
-
-If you encounter issues with the H3 library:
-
-1. Ensure it's properly installed:
+### Save User Location
 ```bash
-ldconfig -p | grep h3
+curl -X POST http://localhost:8080/api/save-location \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "123", "latitude": 41.0151, "longitude": 28.9795, "accuracy": 50}'
 ```
 
-2. Check include paths in Makefile:
-```makefile
-CFLAGS = -Wall -Wextra -std=c99 -I/usr/include/postgresql -I/usr/include/json-c -I/usr/local/include -Isrc
-LIBS_LOGGER = -lpq -lm -lh3
-LIBS_API = -lpq -lm -ljson-c -lmicrohttpd -lh3
+### Calculate Route
+```bash
+curl -X GET "http://localhost:8080/api/route?start_lat=41.0151&start_lon=28.9795&end_id=456" \
+  -H "Authorization: Bearer your_session_token"
 ```
 
-### Common Build Errors
+## 🔍 Algorithm Details
 
-1. **Missing headers**: Ensure all development packages are installed
-2. **Linking errors**: Verify all libraries are installed and accessible
-3. **Database errors**: Ensure the database schema matches the expected structure
+### H3 Algorithm
+- **Purpose**: Geospatial indexing for efficient location queries
+- **Benefits**: 
+  - Fast proximity searches
+  - Hierarchical resolution support
+  - Consistent hexagonal grid system
 
-## License
+### A* Pathfinding
+- **Purpose**: Optimal route calculation
+- **Implementation**: Simplified version using H3 grid
+- **Future**: Full A* implementation with obstacle avoidance
 
-MIT
+### Kring Algorithm
+- **Purpose**: Finding nearby places and points of interest
+- **Usage**: Generates concentric rings of H3 cells around a point
+- **Applications**: Nearby restaurant discovery, meeting point suggestions
 
-## Contributing
+## 🧪 Testing
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+### Build and Test
+```bash
+# Debug build with extra logging
+make -f Makefile_new debug
+
+# Run with debug output
+./build/location_sharing_system
+```
+
+### API Testing
+Use the provided web interface at `http://localhost:8080/` or test endpoints directly with curl.
+
+## 🔮 Future Enhancements
+
+### Planned Features
+1. **Enhanced A* Implementation**: Full pathfinding with real-world constraints
+2. **Kring Optimization**: Improved nearby place discovery
+3. **Real-time Updates**: WebSocket support for live location updates
+4. **Mobile App**: Native mobile applications
+5. **Advanced Analytics**: Location history and movement patterns
+
+### Algorithm Improvements
+1. **Multi-resolution H3**: Dynamic resolution based on zoom level
+2. **Traffic Integration**: Real-time traffic data for route optimization
+3. **Public Transport**: Multi-modal route planning
+4. **Geofencing**: Location-based notifications and alerts
+
+## 🤝 Contributing
+
+1. Follow the modular architecture
+2. Add new features in appropriate modules
+3. Update documentation for new endpoints
+4. Test thoroughly before submitting
+
+## 📝 License
+
+This project is open source. Please refer to the license file for details.
+
+## 🆘 Support
+
+For issues and questions:
+1. Check the documentation
+2. Review the code structure
+3. Test with the provided examples
+4. Create an issue with detailed information
+
+---
+
+**Note**: This modular structure makes the codebase much more maintainable and follows software engineering best practices. Each module has a single responsibility and clear interfaces, making it easier to extend and modify the system.

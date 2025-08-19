@@ -1,0 +1,1 @@
+sudo -u postgres psql -c "ALTER USER tugmirk PASSWORD 'tugmirk123';"

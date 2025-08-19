@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Friend Locator</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
+            overflow: hidden;
+        }
+        
+        #map {
+            height: 100vh;
+            width: 100%;
+            z-index: 1;
+        }
+        
+        .header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .btn {
+            padding: 8px 15px;
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .btn:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateY(-1px);
+        }
+        
+        .panel {
+            position: absolute;
+            top: 80px;
+            z-index: 1000;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            width: 350px;
+            max-height: calc(100vh - 120px);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .friends-panel {
+            left: 20px;
+        }
+        
+        .distance-panel {
+            right: 20px;
+        }
+        
+        .panel-header {
+            padding: 15px 20px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .panel-header h3 {
+            color: #4a5568;
+            font-size: 1.1rem;
+        }
+        
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1rem;
+            cursor: pointer;
+            color: #a0aec0;
+            padding: 5px;
+        }
+        
+        .close-btn:hover {
+            color: #e53e3e;
+        }
+        
+        .panel-content {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #4a5568;
+        }
+        
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+        
+        .submit-btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .submit-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .friends-list {
+            margin-top: 15px;
+        }
+        
+        .friend-item {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .friend-name {
+            font-weight: 500;
+            color: #2d3748;
+        }
+        
+        .friend-status {
+            font-size: 0.8rem;
+            padding: 3px 8px;
+            border-radius: 10px;
+        }
+        
+        .status-online {
+            background: rgba(72, 187, 120, 0.1);
+            color: #48bb78;
+        }
+        
+        .status-offline {
+            background: rgba(229, 62, 62, 0.1);
+            color: #e53e3e;
+        }
+        
+        .distance-result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .distance-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #667eea;
+            text-align: center;
+            margin: 10px 0;
+        }
+        
+        .distance-algorithm {
+            text-align: center;
+            font-size: 0.9rem;
+            color: #718096;
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 2000;
+            padding: 15px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transform: translateX(400px);
+            transition: transform 0.3s ease;
+        }
+        
+        .notification.show {
+            transform: translateX(0);
+        }
+        
+        .notification.success {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        }
+        
+        .notification.error {
+            background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+        }
+        
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 2000;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            display: none;
+        }
+        
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        }
+        
+        .modal-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .modal-header h2 {
+            color: #4a5568;
+            margin-bottom: 5px;
+        }
+        
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            font-weight: 500;
+            color: #718096;
+        }
+        
+        .tab.active {
+            color: #667eea;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .location-btn {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+        }
+        
+        @media (max-width: 768px) {
+            .panel {
+                width: 300px;
+            }
+            
+            .header h1 {
+                font-size: 1.2rem;
+            }
+            
+            .btn span {
+                display: none;
+            }
+            
+            .btn i {
+                margin-right: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><i class="fas fa-map-marked-alt"></i> Friend Locator</h1>
+        <div class="user-menu">
+            <span id="user-display" style="display: none;"></span>
+            <button class="btn" id="auth-btn">
+                <i class="fas fa-user"></i>
+                <span>Login / Register</span>
+            </button>
+            <button class="btn" id="logout-btn" style="display: none;">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>Logout</span>
+            </button>
+        </div>
+    </div>
+    
+    <div class="panel friends-panel" id="friends-panel" style="display: none;">
+        <div class="panel-header">
+            <h3><i class="fas fa-user-friends"></i> Friends</h3>
+            <button class="close-btn" id="close-friends-panel">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="panel-content">
+            <form id="add-friend-form">
+                <div class="form-group">
+                    <label for="friend-username">Add Friend</label>
+                    <input type="text" id="friend-username" required placeholder="Enter friend's username">
+                </div>
+                <button type="submit" class="submit-btn">
+                    <i class="fas fa-user-plus"></i> Add Friend
+                </button>
+            </form>
+            
+            <div class="friends-list" id="friends-list">
+                <!-- Friends will be populated here -->
+            </div>
+        </div>
+    </div>
+    
+    <div class="panel distance-panel" id="distance-panel" style="display: none;">
+        <div class="panel-header">
+            <h3><i class="fas fa-ruler"></i> Distance Calculator</h3>
+            <button class="close-btn" id="close-distance-panel">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="panel-content">
+            <form id="distance-form">
+                <div class="form-group">
+                    <label for="user1">User 1</label>
+                    <select id="user1" required>
+                        <option value="">Select a user</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="user2">User 2</label>
+                    <select id="user2" required>
+                        <option value="">Select a user</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="algorithm">Algorithm</label>
+                    <select id="algorithm" required>
+                        <option value="h3">H3</option>
+                        <option value="astar">A*</option>
+                    </select>
+                </div>
+                
+                <button type="submit" class="submit-btn">
+                    <i class="fas fa-calculator"></i> Calculate Distance
+                </button>
+            </form>
+            
+            <div class="distance-result" id="distance-result" style="display: none;">
+                <div class="distance-value" id="distance-value">0.00 meters</div>
+                <div class="distance-algorithm" id="distance-algorithm">Calculated using H3</div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="map"></div>
+    
+    <button class="btn location-btn" id="send-location-btn" style="display: none;">
+        <i class="fas fa-location-arrow"></i>
+        <span>Send My Location</span>
+    </button>
+    
+    <div class="modal" id="auth-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="auth-modal-title">Login</h2>
+                <p id="auth-modal-subtitle">Enter your credentials to continue</p>
+            </div>
+            
+            <div class="tabs">
+                <div class="tab active" data-tab="login">Login</div>
+                <div class="tab" data-tab="register">Register</div>
+            </div>
+            
+            <div class="tab-content active" id="login-tab">
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="login-username">Username</label>
+                        <input type="text" id="login-username" required placeholder="Enter your username">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="login-password">Password</label>
+                        <input type="password" id="login-password" required placeholder="Enter your password">
+                    </div>
+                    
+                    <button type="submit" class="submit-btn">
+                        <i class="fas fa-sign-in-alt"></i> Login
+                    </button>
+                </form>
+            </div>
+            
+            <div class="tab-content" id="register-tab">
+                <form id="register-form">
+                    <div class="form-group">
+                        <label for="register-username">Username</label>
+                        <input type="text" id="register-username" required placeholder="Choose a username">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="register-password">Password</label>
+                        <input type="password" id="register-password" required placeholder="Choose a password">
+                    </div>
+                    
+                    <button type="submit" class="submit-btn">
+                        <i class="fas fa-user-plus"></i> Register
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="notification" id="notification"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- H3 JavaScript Library -->
+    <script src="https://unpkg.com/h3-js@4.1.0/dist/h3-js.umd.js"></script>
+    
+    <script>
+        // Global variables
+        let map;
+        let userLocationMarker = null;
+        let friendsMarkers = {};
+        let sessionToken = null;
+        let currentUser = null;
+        
+        // DOM Elements
+        const authBtn = document.getElementById('auth-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const userDisplay = document.getElementById('user-display');
+        const authModal = document.getElementById('auth-modal');
+        const friendsPanel = document.getElementById('friends-panel');
+        const distancePanel = document.getElementById('distance-panel');
+        const sendLocationBtn = document.getElementById('send-location-btn');
+        const notification = document.getElementById('notification');
+        
+        // Initialize the application
+        function initApp() {
+            // Initialize the map
+            map = L.map('map').setView([0, 0], 2);
+            
+            // Add OpenStreetMap tiles
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+            
+            // Check if user is already logged in (from localStorage)
+            const savedToken = localStorage.getItem('sessionToken');
+            const savedUser = localStorage.getItem('currentUser');
+            
+            if (savedToken && savedUser) {
+                sessionToken = savedToken;
+                currentUser = JSON.parse(savedUser);
+                onLoginSuccess();
+                loadFriends();
+                loadFriendsLocations();
+            }
+            
+            // Event listeners
+            authBtn.addEventListener('click', () => {
+                authModal.style.display = 'flex';
+            });
+            
+            logoutBtn.addEventListener('click', logout);
+            
+            document.getElementById('close-friends-panel').addEventListener('click', () => {
+                friendsPanel.style.display = 'none';
+            });
+            
+            document.getElementById('close-distance-panel').addEventListener('click', () => {
+                distancePanel.style.display = 'none';
+            });
+            
+            sendLocationBtn.addEventListener('click', sendUserLocation);
+            
+            // Tab switching in auth modal
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    // Remove active class from all tabs and content
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    
+                    // Add active class to clicked tab
+                    tab.classList.add('active');
+                    
+                    // Show corresponding content
+                    const tabName = tab.getAttribute('data-tab');
+                    document.getElementById(`${tabName}-tab`).classList.add('active');
+                    
+                    // Update modal title
+                    document.getElementById('auth-modal-title').textContent = 
+                        tabName === 'login' ? 'Login' : 'Register';
+                    document.getElementById('auth-modal-subtitle').textContent = 
+                        tabName === 'login' ? 'Enter your credentials to continue' : 'Create a new account';
+                });
+            });
+            
+            // Form submissions
+            document.getElementById('login-form').addEventListener('submit', handleLogin);
+            document.getElementById('register-form').addEventListener('submit', handleRegister);
+            document.getElementById('add-friend-form').addEventListener('submit', handleAddFriend);
+            document.getElementById('distance-form').addEventListener('submit', handleCalculateDistance);
+        }
+        
+        // Show notification
+        function showNotification(message, type = 'success') {
+            notification.textContent = message;
+            notification.className = `notification ${type} show`;
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+        
+        // Handle login
+        async function handleLogin(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    sessionToken = data.session_token;
+                    currentUser = { username };
+                    
+                    // Save to localStorage
+                    localStorage.setItem('sessionToken', sessionToken);
+                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                    
+                    onLoginSuccess();
+                    authModal.style.display = 'none';
+                    showNotification('Logged in successfully!');
+                } else {
+                    const errorData = await response.json();
+                    showNotification(errorData.error || 'Login failed', 'error');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showNotification('An error occurred during login', 'error');
+            }
+        }
+        
+        // Handle registration
+        async function handleRegister(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('register-username').value;
+            const password = document.getElementById('register-password').value;
+            
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    sessionToken = data.session_token;
+                    currentUser = { username: data.username };
+                    
+                    // Save to localStorage
+                    localStorage.setItem('sessionToken', sessionToken);
+                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                    
+                    onLoginSuccess();
+                    authModal.style.display = 'none';
+                    showNotification('Registered and logged in successfully!');
+                } else {
+                    const errorData = await response.json();
+                    showNotification(errorData.error || 'Registration failed', 'error');
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                showNotification('An error occurred during registration', 'error');
+            }
+        }
+        
+        // Handle logout
+        async function logout() {
+            if (!sessionToken) return;
+            
+            try {
+                const response = await fetch('/api/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${sessionToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                // Clear session data regardless of response
+                sessionToken = null;
+                currentUser = null;
+                localStorage.removeItem('sessionToken');
+                localStorage.removeItem('currentUser');
+                
+                onLogoutSuccess();
+                showNotification('Logged out successfully!');
+            } catch (error) {
+                console.error('Logout error:', error);
+                // Still clear local data even if server call fails
+                sessionToken = null;
+                currentUser = null;
+                localStorage.removeItem('sessionToken');
+                localStorage.removeItem('currentUser');
+                onLogoutSuccess();
+            }
+        }
+        
+        // Handle add friend
+        async function handleAddFriend(e) {
+            e.preventDefault();
+            
+            const friendUsername = document.getElementById('friend-username').value;
+            
+            try {
+                const response = await fetch('/api/add-friend', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${sessionToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ friend_username: friendUsername })
+                });
+                
+                if (response.ok) {
+                    document.getElementById('friend-username').value = '';
+                    loadFriends();
+                    showNotification('Friend added successfully!');
+                } else {
+                    const errorData = await response.json();
+                    showNotification(errorData.error || 'Failed to add friend', 'error');
+                }
+            } catch (error) {
+                console.error('Add friend error:', error);
+                showNotification('An error occurred while adding friend', 'error');
+            }
+        }
+        
+        // Handle calculate distance
+        async function handleCalculateDistance(e) {
+            e.preventDefault();
+            
+            const user1Id = document.getElementById('user1').value;
+            const user2Id = document.getElementById('user2').value;
+            const algorithm = document.getElementById('algorithm').value;
+            
+            if (!user1Id || !user2Id) {
+                showNotification('Please select both users', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/distance/${algorithm}?user1=${user1Id}&user2=${user2Id}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${sessionToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('distance-value').textContent = `${data.distance.toFixed(2)} ${data.unit}`;
+                    document.getElementById('distance-algorithm').textContent = `Calculated using ${data.algorithm}`;
+                    document.getElementById('distance-result').style.display = 'block';
+                } else {
+                    const errorData = await response.json();
+                    showNotification(errorData.error || 'Failed to calculate distance', 'error');
+                }
+            } catch (error) {
+                console.error('Calculate distance error:', error);
+                showNotification('An error occurred while calculating distance', 'error');
+            }
+        }
+        
+        // Send user location
+        async function sendUserLocation() {
+            if (!navigator.geolocation) {
+                showNotification('Geolocation is not supported by your browser', 'error');
+                return;
+            }
+            
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    const accuracy = position.coords.accuracy;
+                    
+                    try {
+                        const response = await fetch('/api/save-location', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${sessionToken}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({ latitude: lat, longitude: lon, accuracy: accuracy })
+                        });
+                        
+                        if (response.ok) {
+                            // Update user location on map
+                            if (userLocationMarker) {
+                                map.removeLayer(userLocationMarker);
+                            }
+                            
+                            userLocationMarker = L.marker([lat, lon], {
+                                title: 'Your Location'
+                            }).addTo(map)
+                              .bindPopup(`<b>Your Location</b><br>Accuracy: ${Math.round(accuracy)} meters`)
+                              .openPopup();
+                            
+                            map.setView([lat, lon], 13);
+                            showNotification('Location sent successfully!');
+                        } else {
+                            const errorData = await response.json();
+                            showNotification(errorData.error || 'Failed to send location', 'error');
+                        }
+                    } catch (error) {
+                        console.error('Send location error:', error);
+                        showNotification('An error occurred while sending location', 'error');
+                    }
+                },
+                (error) => {
+                    let errorMessage = '';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMessage = "User denied the request for Geolocation.";
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage = "Location information is unavailable.";
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage = "The request to get user location timed out.";
+                            break;
+                        case error.UNKNOWN_ERROR:
+                            errorMessage = "An unknown error occurred.";
+                            break;
+                    }
+                    showNotification(errorMessage, 'error');
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 60000
+                }
+            );
+        }
+        
+        // Load friends
+        async function loadFriends() {
+            try {
+                const response = await fetch('/api/friends', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${sessionToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const friends = await response.json();
+                    updateFriendsList(friends);
+                    updateDistanceUsers(friends);
+                } else {
+                    const errorData = await response.json();
+                    showNotification(errorData.error || 'Failed to load friends', 'error');
+                }
+            } catch (error) {
+                console.error('Load friends error:', error);
+                showNotification('An error occurred while loading friends', 'error');
+            }
+        }
+        
+        // Update friends list in UI
+        function updateFriendsList(friends) {
+            const friendsList = document.getElementById('friends-list');
+            friendsList.innerHTML = '';
+            
+            if (friends.length === 0) {
+                friendsList.innerHTML = '<p>No friends found. Add some friends to get started!</p>';
+                return;
+            }
+            
+            friends.forEach(friend => {
+                const friendItem = document.createElement('div');
+                friendItem.className = 'friend-item';
+                friendItem.innerHTML = `
+                    <div class="friend-name">${friend.username}</div>
+                    <div class="friend-status ${friend.online ? 'status-online' : 'status-offline'}">
+                        ${friend.online ? 'Online' : 'Offline'}
+                    </div>
+                `;
+                friendsList.appendChild(friendItem);
+            });
+        }
+        
+        // Update users in distance calculation dropdowns
+        function updateDistanceUsers(friends) {
+            const user1Select = document.getElementById('user1');
+            const user2Select = document.getElementById('user2');
+            
+            // Clear existing options
+            user1Select.innerHTML = '<option value="">Select a user</option>';
+            user2Select.innerHTML = '<option value="">Select a user</option>';
+            
+            // Add current user
+            const currentUserOption1 = document.createElement('option');
+            currentUserOption1.value = 'me';
+            currentUserOption1.textContent = `${currentUser.username} (Me)`;
+            user1Select.appendChild(currentUserOption1);
+            
+            const currentUserOption2 = document.createElement('option');
+            currentUserOption2.value = 'me';
+            currentUserOption2.textContent = `${currentUser.username} (Me)`;
+            user2Select.appendChild(currentUserOption2);
+            
+            // Add friends
+            friends.forEach(friend => {
+                const option1 = document.createElement('option');
+                option1.value = friend.id;
+                option1.textContent = friend.username;
+                user1Select.appendChild(option1);
+                
+                const option2 = document.createElement('option');
+                option2.value = friend.id;
+                option2.textContent = friend.username;
+                user2Select.appendChild(option2);
+            });
+        }
+        
+        // Load friends locations
+        async function loadFriendsLocations() {
+            try {
+                const response = await fetch('/api/friends/locations', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${sessionToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const locations = await response.json();
+                    updateFriendsLocationsOnMap(locations);
+                } else {
+                    const errorData = await response.json();
+                    showNotification(errorData.error || 'Failed to load friends locations', 'error');
+                }
+            } catch (error) {
+                console.error('Load friends locations error:', error);
+            }
+        }
+        
+        // Calculate route to friend
+        async function calculateRouteToFriend(friendId, friendName) {
+            try {
+                // First, get user's current location
+                if (!navigator.geolocation) {
+                    showNotification('Geolocation is not supported by your browser', 'error');
+                    return;
+                }
+                
+                navigator.geolocation.getCurrentPosition(async (position) => {
+                    const userLat = position.coords.latitude;
+                    const userLon = position.coords.longitude;
+                    
+                    // Get route from API
+                    const response = await fetch(`/api/route?start_lat=${userLat}&start_lon=${userLon}&end_id=${friendId}`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${sessionToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        
+                        // Visualize route on map
+                        if (data.path && data.path.length > 0) {
+                            // Remove any existing route
+                            if (window.currentRoute) {
+                                map.removeLayer(window.currentRoute);
+                            }
+                            
+                            // Create polyline for route
+                            const latLngs = data.path.map(point => [point.lat, point.lng]);
+                            window.currentRoute = L.polyline(latLngs, {
+                                color: '#667eea',
+                                weight: 5,
+                                opacity: 0.7
+                            }).addTo(map);
+                            
+                            // Fit map to route bounds
+                            map.fitBounds(window.currentRoute.getBounds());
+                            
+                            showNotification(`Route to ${friendName} calculated (${data.distance.toFixed(2)} meters)`, 'success');
+                        } else {
+                            showNotification('No route found', 'error');
+                        }
+                    } else {
+                        const errorData = await response.json();
+                        showNotification(errorData.error || 'Failed to calculate route', 'error');
+                    }
+                }, (error) => {
+                    let errorMessage = '';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMessage = "User denied the request for Geolocation.";
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage = "Location information is unavailable.";
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage = "The request to get user location timed out.";
+                            break;
+                        case error.UNKNOWN_ERROR:
+                            errorMessage = "An unknown error occurred.";
+                            break;
+                    }
+                    showNotification(errorMessage, 'error');
+                });
+            } catch (error) {
+                console.error('Calculate route error:', error);
+                showNotification('An error occurred while calculating route', 'error');
+            }
+        }
+        
+        // Update friends locations on map
+        function updateFriendsLocationsOnMap(locations) {
+            // Remove existing friends markers
+            Object.values(friendsMarkers).forEach(marker => map.removeLayer(marker));
+            friendsMarkers = {};
+            
+            // Add new friends markers
+            locations.forEach(location => {
+                const marker = L.marker([location.latitude, location.longitude], {
+                    title: `${location.username} - ${new Date(location.timestamp).toLocaleTimeString()}`
+                }).addTo(map)
+                  .bindPopup(`
+                      <div style="text-align: center;">
+                          <b>${location.username}</b><br>
+                          <small>Accuracy: ${location.accuracy} meters</small><br>
+                          <small>${new Date(location.timestamp).toLocaleTimeString()}</small><br>
+                          <button onclick="calculateRouteToFriend('${location.user_id}', '${location.username}')">Find Route</button>
+                      </div>
+                  `);
+                
+                friendsMarkers[location.user_id] = marker;
+            });
+        }
+        
+        // On login success
+        function onLoginSuccess() {
+            // Hide auth button and show logout button
+            authBtn.style.display = 'none';
+            logoutBtn.style.display = 'flex';
+            userDisplay.style.display = 'block';
+            userDisplay.textContent = `Hello, ${currentUser.username}`;
+            
+            // Show other UI elements
+            friendsPanel.style.display = 'block';
+            distancePanel.style.display = 'block';
+            sendLocationBtn.style.display = 'block';
+            
+            // Hide auth modal
+            authModal.style.display = 'none';
+            
+            // Start periodic updates
+            setInterval(loadFriends, 30000); // Update friends every 30 seconds
+            setInterval(loadFriendsLocations, 10000); // Update locations every 10 seconds
+        }
+        
+        // On logout success
+        function onLogoutSuccess() {
+            // Show auth button and hide logout button
+            authBtn.style.display = 'flex';
+            logoutBtn.style.display = 'none';
+            userDisplay.style.display = 'none';
+            
+            // Hide other UI elements
+            friendsPanel.style.display = 'none';
+            distancePanel.style.display = 'none';
+            sendLocationBtn.style.display = 'none';
+            
+            // Clear map markers
+            if (userLocationMarker) {
+                map.removeLayer(userLocationMarker);
+                userLocationMarker = null;
+            }
+            
+            Object.values(friendsMarkers).forEach(marker => map.removeLayer(marker));
+            friendsMarkers = {};
+            
+            // Clear friends list and distance users
+            document.getElementById('friends-list').innerHTML = '';
+            document.getElementById('user1').innerHTML = '<option value="">Select a user</option>';
+            document.getElementById('user2').innerHTML = '<option value="">Select a user</option>';
+            document.getElementById('distance-result').style.display = 'none';
+        }
+        
+        // Initialize the app when the page loads
+        window.addEventListener('load', initApp);
+    </script>
+</body>
+</html>

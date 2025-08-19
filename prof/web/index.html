@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Coordinate Map with H3 Indexing</title>
+    <title>Location Sharing System</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -20,339 +20,307 @@
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f5f7fa;
-            color: #333;
-            overflow: hidden;
-        }
-        
-        #map {
-            height: 100vh;
-            width: 100%;
-            z-index: 1;
-        }
-        
-        .header {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 1000;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 15px 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .header h1 {
-            font-size: 1.5rem;
-            font-weight: 600;
-        }
-        
-        .controls {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .btn {
-            padding: 8px 15px;
-            background: rgba(255,255,255,0.2);
-            border: 1px solid rgba(255,255,255,0.3);
-            color: white;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-        
-        .btn:hover {
-            background: rgba(255,255,255,0.3);
-            transform: translateY(-1px);
-        }
-        
-        .info-panel {
-            position: absolute;
-            top: 80px;
-            right: 20px;
-            z-index: 1000;
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-            max-width: 400px;
-            width: 90%;
-            max-height: calc(100vh - 120px);
+            color: #333;
+            min-height: 100vh;
             display: flex;
             flex-direction: column;
         }
         
-        .panel-header {
+        .header {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            color: white;
+            padding: 15px 20px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #f0f0f0;
-        }
-        
-        .panel-header h3 {
-            color: #4a5568;
-            font-size: 1.3rem;
-        }
-        
-        .close-btn {
-            background: none;
-            border: none;
-            font-size: 1.2rem;
-            cursor: pointer;
-            color: #a0aec0;
-            padding: 5px;
-        }
-        
-        .close-btn:hover {
-            color: #e53e3e;
-        }
-        
-        .coordinates-list {
-            flex: 1;
-            overflow-y: auto;
-            max-height: calc(100vh - 200px);
-        }
-        
-        .coordinate-item {
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 12px;
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            transition: all 0.3s ease;
-            cursor: pointer;
-        }
-        
-        .coordinate-item:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-            border-color: #cbd5e0;
-        }
-        
-        .location-names {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-        
-        .location-name {
-            font-weight: 600;
-            color: #2d3748;
-            font-size: 1.1rem;
-        }
-        
-        .distance {
-            font-weight: 700;
-            color: #667eea;
-            font-size: 1.2rem;
-            background: rgba(102, 126, 234, 0.1);
-            padding: 3px 10px;
-            border-radius: 20px;
-        }
-        
-        .coordinates {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-        
-        .coord-box {
-            background: #edf2f7;
-            padding: 8px;
-            border-radius: 6px;
-            font-size: 0.9rem;
-        }
-        
-        .coord-label {
-            font-weight: 600;
-            color: #4a5568;
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .coord-value {
-            font-family: monospace;
-            color: #2d3748;
-            font-size: 0.9rem;
-        }
-        
-        .h3-indexes {
-            display: flex;
-            justify-content: space-between;
-            background: #e6fffa;
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            border: 1px solid #b2f5ea;
-            margin-bottom: 10px;
-        }
-        
-        .h3-label {
-            font-weight: 600;
-            color: #234e52;
-        }
-        
-        .h3-value {
-            font-family: monospace;
-            color: #234e52;
-            font-weight: 500;
-        }
-        
-        .path-info {
-            background: #fff3e0;
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            border: 1px solid #ffe0b2;
-            margin-bottom: 10px;
-        }
-        
-        .path-label {
-            font-weight: 600;
-            color: #e65100;
-        }
-        
-        .path-value {
-            font-family: monospace;
-            color: #e65100;
-            font-weight: 500;
-        }
-        
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 2px solid #f0f0f0;
-        }
-        
-        .stat-item {
-            text-align: center;
-            padding: 10px;
-            background: #f8fafc;
-            border-radius: 8px;
-        }
-        
-        .stat-value {
-            font-size: 1.4rem;
-            font-weight: 700;
-            color: #667eea;
-        }
-        
-        .stat-label {
-            font-size: 0.8rem;
-            color: #718096;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .empty-state {
-            text-align: center;
-            padding: 30px;
-            color: #a0aec0;
-        }
-        
-        .empty-state i {
-            font-size: 3rem;
-            margin-bottom: 15px;
-            opacity: 0.5;
-        }
-        
-        .loading {
-            text-align: center;
-            padding: 30px;
-            color: #667eea;
-        }
-        
-        .loading i {
-            font-size: 2rem;
-            margin-bottom: 15px;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-        
-        .search-box {
-            position: absolute;
-            top: 80px;
-            left: 20px;
+            position: relative;
             z-index: 1000;
-            background: white;
-            padding: 15px;
-            border-radius: 10px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-            width: 300px;
-            display: none;
         }
         
-        .search-box.active {
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+        }
+        
+        .auth-section {
+            display: none;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            max-width: 400px;
+            margin: 50px auto;
+        }
+        
+        .auth-section.active {
             display: block;
         }
         
-        .search-box h3 {
-            margin-bottom: 15px;
+        .auth-section h2 {
+            text-align: center;
+            margin-bottom: 25px;
             color: #4a5568;
         }
         
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
         
         .form-group label {
             display: block;
-            margin-bottom: 5px;
+            margin-bottom: 8px;
             font-weight: 500;
             color: #4a5568;
         }
         
         .form-group input {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #e2e8f0;
-            border-radius: 6px;
-            font-size: 1rem;
-        }
-        
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-        
-        .submit-btn {
-            width: 100%;
             padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+        
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            padding: 12px 20px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            border-radius: 6px;
-            font-size: 1rem;
-            font-weight: 600;
+            border-radius: 8px;
             cursor: pointer;
+            font-weight: 600;
             transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
         }
         
-        .submit-btn:hover {
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn-secondary {
+            background: rgba(255,255,255,0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            color: white;
+            width: auto;
+            padding: 8px 15px;
+        }
+        
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        .auth-toggle {
+            text-align: center;
+            margin-top: 20px;
+            color: #718096;
+        }
+        
+        .auth-toggle a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        .main-container {
+            flex: 1;
+            display: none;
+            position: relative;
+        }
+        
+        .main-container.active {
+            display: flex;
+        }
+        
+        #map {
+            flex: 1;
+            height: calc(100vh - 80px);
+        }
+        
+        .sidebar {
+            width: 350px;
+            background: white;
+            box-shadow: -2px 0 20px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .sidebar-header {
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .sidebar-header h3 {
+            margin-bottom: 10px;
+        }
+        
+        .location-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .friends-section {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        
+        .friends-list {
+            margin-bottom: 30px;
+        }
+        
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .friend-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .friend-item:hover {
             transform: translateY(-1px);
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .friend-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            margin-right: 12px;
+        }
+        
+        .friend-info {
+            flex: 1;
+        }
+        
+        .friend-name {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 2px;
+        }
+        
+        .friend-status {
+            font-size: 0.8rem;
+            color: #718096;
+        }
+        
+        .online-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #48bb78;
+            margin-left: 8px;
+        }
+        
+        .offline-indicator {
+            background: #a0aec0;
+        }
+        
+        .add-friend-form {
+            margin-bottom: 20px;
+        }
+        
+        .add-friend-input {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .add-friend-input input {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .add-friend-input button {
+            padding: 10px 15px;
+            background: #48bb78;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        
+        .route-section {
+            border-top: 1px solid #e2e8f0;
+            padding-top: 20px;
+        }
+        
+        .route-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .route-info {
+            background: #f0f9ff;
+            border: 1px solid #bae6fd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .route-info.active {
+            display: block;
         }
         
         .notification {
@@ -367,6 +335,7 @@
             box-shadow: 0 4px 15px rgba(0,0,0,0.2);
             transform: translateX(400px);
             transition: transform 0.3s ease;
+            max-width: 300px;
         }
         
         .notification.show {
@@ -381,158 +350,157 @@
             background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
         }
         
-        .legend {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            z-index: 1000;
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            font-size: 0.9rem;
+        .loading {
+            text-align: center;
+            padding: 30px;
+            color: #a0aec0;
         }
         
-        .legend-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 8px;
+        .loading i {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            animation: spin 1s linear infinite;
         }
         
-        .legend-color {
-            width: 20px;
-            height: 4px;
-            margin-right: 10px;
-            border-radius: 2px;
-        }
-        
-        .h3-path-color {
-            background: #ff6b6b;
-        }
-        
-        .direct-line-color {
-            background: #667eea;
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
         
         @media (max-width: 768px) {
-            .info-panel {
-                top: 80px;
-                right: 10px;
-                left: 10px;
-                max-width: none;
+            .main-container {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: 300px;
+            }
+            
+            #map {
+                height: calc(100vh - 380px);
             }
             
             .header h1 {
-                font-size: 1.2rem;
-            }
-            
-            .btn span {
-                display: none;
-            }
-            
-            .btn i {
-                margin-right: 0;
+                font-size: 1.4rem;
             }
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1><i class="fas fa-map-marked-alt"></i> Coordinate Distance Calculator</h1>
-        <div class="controls">
-            <button class="btn" id="add-btn">
-                <i class="fas fa-plus"></i>
-                <span>Add Coordinates</span>
-            </button>
-            <button class="btn" id="refresh-btn">
-                <i class="fas fa-sync-alt"></i>
-                <span>Refresh</span>
+        <h1><i class="fas fa-map-marked-alt"></i> Location Sharing System</h1>
+        <div class="user-info" id="user-info" style="display: none;">
+            <div class="user-avatar" id="user-avatar">U</div>
+            <span id="username">User</span>
+            <button class="btn-secondary" onclick="logout()">
+                <i class="fas fa-sign-out-alt"></i> Logout
             </button>
         </div>
     </div>
     
-    <div class="search-box" id="search-box">
-        <h3><i class="fas fa-plus-circle"></i> Add New Coordinates</h3>
-        <form id="coordinate-form">
+    <!-- Login Section -->
+    <div class="auth-section active" id="login-section">
+        <h2><i class="fas fa-sign-in-alt"></i> Login</h2>
+        <form id="login-form">
             <div class="form-group">
-                <label for="name1">First Location Name</label>
-                <input type="text" id="name1" required placeholder="e.g., Istanbul">
+                <label for="login-username">Username</label>
+                <input type="text" id="login-username" required placeholder="Enter your username">
             </div>
-            
-            <div class="form-row">
                 <div class="form-group">
-                    <label for="lat1">Latitude</label>
-                    <input type="number" id="lat1" step="any" required placeholder="41.0151">
+                <label for="login-password">Password</label>
+                <input type="password" id="login-password" required placeholder="Enter your password">
                 </div>
-                <div class="form-group">
-                    <label for="lon1">Longitude</label>
-                    <input type="number" id="lon1" step="any" required placeholder="28.9795">
-                </div>
-            </div>
-            
-            <div class="form-group">
-                <label for="name2">Second Location Name</label>
-                <input type="text" id="name2" required placeholder="e.g., Ankara">
-            </div>
-            
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="lat2">Latitude</label>
-                    <input type="number" id="lat2" step="any" required placeholder="39.9334">
-                </div>
-                <div class="form-group">
-                    <label for="lon2">Longitude</label>
-                    <input type="number" id="lon2" step="any" required placeholder="32.8597">
-                </div>
-            </div>
-            
-            <button type="submit" class="submit-btn">
-                <i class="fas fa-calculator"></i> Calculate Distance
+            <button type="submit" class="btn">
+                <i class="fas fa-sign-in-alt"></i> Login
             </button>
         </form>
+        <div class="auth-toggle">
+            Don't have an account? <a href="#" onclick="showRegister()">Sign up</a>
+                </div>
+            </div>
+            
+    <!-- Register Section -->
+    <div class="auth-section" id="register-section">
+        <h2><i class="fas fa-user-plus"></i> Sign Up</h2>
+        <form id="register-form">
+            <div class="form-group">
+                <label for="register-username">Username</label>
+                <input type="text" id="register-username" required placeholder="Choose a username">
+            </div>
+                <div class="form-group">
+                <label for="register-password">Password</label>
+                <input type="password" id="register-password" required placeholder="Create a password">
+                </div>
+            <button type="submit" class="btn">
+                <i class="fas fa-user-plus"></i> Sign Up
+            </button>
+        </form>
+        <div class="auth-toggle">
+            Already have an account? <a href="#" onclick="showLogin()">Login</a>
+        </div>
     </div>
     
+    <!-- Main Application -->
+    <div class="main-container" id="main-container">
     <div id="map"></div>
     
-    <div class="info-panel">
-        <div class="panel-header">
-            <h3><i class="fas fa-database"></i> Coordinate Data</h3>
-            <button class="close-btn" id="close-panel">
-                <i class="fas fa-times"></i>
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h3><i class="fas fa-users"></i> Friends & Locations</h3>
+                <div class="location-controls">
+                    <button class="btn-secondary" onclick="shareLocation()">
+                        <i class="fas fa-location-arrow"></i> Share Location
+                    </button>
+                    <button class="btn-secondary" onclick="refreshLocations()">
+                        <i class="fas fa-sync-alt"></i> Refresh
             </button>
-        </div>
-        
-        <div id="coordinates-info">
-            <div class="loading">
-                <i class="fas fa-spinner"></i>
-                <p>Loading coordinates...</p>
             </div>
         </div>
         
-        <div class="stats">
-            <div class="stat-item">
-                <div class="stat-value" id="total-count">0</div>
-                <div class="stat-label">Total Pairs</div>
+            <div class="friends-section">
+                <div class="friends-list">
+                    <div class="section-title">
+                        <i class="fas fa-user-friends"></i> Friends
             </div>
-            <div class="stat-item">
-                <div class="stat-value" id="avg-distance">0</div>
-                <div class="stat-label">Avg Distance</div>
+                    <div class="add-friend-form">
+                        <div class="add-friend-input">
+                            <input type="text" id="friend-username" placeholder="Friend's username">
+                            <button onclick="addFriend()">
+                                <i class="fas fa-plus"></i>
+                            </button>
             </div>
-            <div class="stat-item">
-                <div class="stat-value" id="max-distance">0</div>
-                <div class="stat-label">Max Distance</div>
+                    </div>
+                    <div id="friends-list">
+                        <div class="loading">
+                            <i class="fas fa-spinner"></i>
+                            <p>Loading friends...</p>
             </div>
         </div>
     </div>
     
-    <div class="legend">
-        <div class="legend-item">
-            <div class="legend-color h3-path-color"></div>
-            <div>H3 Path (A* Algorithm)</div>
+                <div class="route-section">
+                    <div class="section-title">
+                        <i class="fas fa-route"></i> Route Planning
         </div>
-        <div class="legend-item">
-            <div class="legend-color direct-line-color"></div>
-            <div>Direct Line</div>
+                    <div class="route-controls">
+                        <select id="route-algorithm">
+                            <option value="h3">H3 Algorithm</option>
+                            <option value="astar">A* Algorithm</option>
+                        </select>
+                        <select id="friend-selector">
+                            <option value="">Select a friend</option>
+                        </select>
+                        <button class="btn" onclick="calculateRoute()">
+                            <i class="fas fa-route"></i> Calculate Route
+                        </button>
+        </div>
+                    <div class="route-info" id="route-info">
+                        <h4><i class="fas fa-info-circle"></i> Route Information</h4>
+                        <div id="route-details"></div>
+        </div>
+                </div>
+            </div>
         </div>
     </div>
     
@@ -542,18 +510,467 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <script>
-        // Initialize the map
-        const map = L.map('map').setView([0, 0], 2);
+        // Global variables
+        let map;
+        let currentUser = null;
+        let sessionToken = null;
+        let friends = [];
+        let friendMarkers = {};
+        let userMarker = null;
+        let routePolyline = null;
         
-        // Add OpenStreetMap tiles
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        }).addTo(map);
+        // Initialize the application
+        function initApp() {
+            // Check if user is already logged in
+            const token = localStorage.getItem('sessionToken');
+            if (token) {
+                sessionToken = token;
+                validateSession();
+            }
+        }
         
-        // Store markers, polylines, and H3 paths
-        const markers = [];
-        const directLines = [];
-        const h3Paths = [];
+        // Authentication functions
+        function showLogin() {
+            document.getElementById('login-section').classList.add('active');
+            document.getElementById('register-section').classList.remove('active');
+        }
+        
+        function showRegister() {
+            document.getElementById('register-section').classList.add('active');
+            document.getElementById('login-section').classList.remove('active');
+        }
+        
+        function showMainApp() {
+            document.getElementById('login-section').classList.remove('active');
+            document.getElementById('register-section').classList.remove('active');
+            document.getElementById('main-container').classList.add('active');
+            document.getElementById('user-info').style.display = 'flex';
+            
+            if (!map) {
+                initMap();
+            }
+            
+            loadFriends();
+            startLocationUpdates();
+        }
+        
+        // Login form handler
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    sessionToken = data.session_token;
+                    localStorage.setItem('sessionToken', sessionToken);
+                    currentUser = { username };
+                    document.getElementById('username').textContent = username;
+                    document.getElementById('user-avatar').textContent = username[0].toUpperCase();
+                    showMainApp();
+                    showNotification('Login successful!', 'success');
+            } else {
+                    showNotification(data.error || 'Login failed', 'error');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showNotification('Connection error', 'error');
+            }
+        });
+        
+        // Register form handler
+        document.getElementById('register-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('register-username').value;
+            const password = document.getElementById('register-password').value;
+            
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showNotification('Registration successful! Please login.', 'success');
+                    showLogin();
+                    document.getElementById('login-username').value = username;
+                } else {
+                    showNotification(data.error || 'Registration failed', 'error');
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                showNotification('Connection error', 'error');
+            }
+        });
+        
+        // Validate session
+        async function validateSession() {
+            try {
+                const response = await fetch('/api/user', {
+                    headers: {
+                        'Authorization': `Bearer ${sessionToken}`
+                    }
+                });
+                
+                if (response.ok) {
+                const data = await response.json();
+                    currentUser = data;
+                    document.getElementById('username').textContent = data.username;
+                    document.getElementById('user-avatar').textContent = data.username[0].toUpperCase();
+                    showMainApp();
+                } else {
+                    localStorage.removeItem('sessionToken');
+                    sessionToken = null;
+                }
+            } catch (error) {
+                console.error('Session validation error:', error);
+                localStorage.removeItem('sessionToken');
+                sessionToken = null;
+            }
+        }
+        
+        // Logout function
+        async function logout() {
+            try {
+                await fetch('/api/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${sessionToken}`
+                    }
+                });
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+            
+            localStorage.removeItem('sessionToken');
+            sessionToken = null;
+            currentUser = null;
+            location.reload();
+        }
+        
+        // Initialize map
+        function initMap() {
+            map = L.map('map').setView([41.0082, 28.9784], 10); // Istanbul
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+        }
+        
+        // Share current location
+        function shareLocation() {
+            if (navigator.geolocation) {
+                showNotification('Getting your location...', 'success');
+                
+                navigator.geolocation.getCurrentPosition(
+                    async (position) => {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        const accuracy = position.coords.accuracy;
+                        
+                        try {
+                            const response = await fetch('/api/save-location', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${sessionToken}`
+                                },
+                                body: JSON.stringify({
+                                    user_id: currentUser.user_id,
+                                    latitude: lat,
+                                    longitude: lng,
+                                    accuracy: accuracy
+                                })
+                            });
+                            
+                            if (response.ok) {
+                                showNotification('Location shared successfully!', 'success');
+                                updateUserMarker(lat, lng);
+                                map.setView([lat, lng], 13);
+                            } else {
+                                showNotification('Failed to share location', 'error');
+                            }
+                        } catch (error) {
+                            console.error('Share location error:', error);
+                            showNotification('Connection error', 'error');
+                        }
+                    },
+                    (error) => {
+                        showNotification('Failed to get location', 'error');
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 60000
+                    }
+                );
+            } else {
+                showNotification('Geolocation not supported', 'error');
+            }
+        }
+        
+        // Update user marker on map
+        function updateUserMarker(lat, lng) {
+            if (userMarker) {
+                map.removeLayer(userMarker);
+            }
+            
+            userMarker = L.marker([lat, lng], {
+                icon: L.divIcon({
+                    className: 'user-marker',
+                    html: '<i class="fas fa-user" style="color: #667eea;"></i>',
+                    iconSize: [20, 20]
+                })
+            }).addTo(map).bindPopup(`<b>Your Location</b><br>${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+        }
+        
+        // Load friends list
+        async function loadFriends() {
+            try {
+                const response = await fetch('/api/friends', {
+                    headers: {
+                        'Authorization': `Bearer ${sessionToken}`
+                    }
+                });
+                
+                if (response.ok) {
+                    friends = await response.json();
+                    updateFriendsUI();
+                    updateFriendSelector();
+                } else {
+                    showNotification('Failed to load friends', 'error');
+                }
+                } catch (error) {
+                console.error('Load friends error:', error);
+                showNotification('Connection error', 'error');
+            }
+        }
+        
+        // Update friends UI
+        function updateFriendsUI() {
+            const friendsList = document.getElementById('friends-list');
+            
+            if (friends.length === 0) {
+                friendsList.innerHTML = '<p style="color: #a0aec0; text-align: center;">No friends yet. Add some friends to see their locations!</p>';
+                return;
+            }
+            
+            let html = '';
+            friends.forEach(friend => {
+                html += `
+                    <div class="friend-item" onclick="focusOnFriend('${friend.id}')">
+                        <div class="friend-avatar">${friend.username[0].toUpperCase()}</div>
+                        <div class="friend-info">
+                            <div class="friend-name">${friend.username}</div>
+                            <div class="friend-status">Click to view location</div>
+                        </div>
+                        <div class="online-indicator ${friend.online ? '' : 'offline-indicator'}"></div>
+                    </div>
+                `;
+            });
+            
+            friendsList.innerHTML = html;
+        }
+        
+        // Update friend selector for routing
+        function updateFriendSelector() {
+            const selector = document.getElementById('friend-selector');
+            selector.innerHTML = '<option value="">Select a friend</option>';
+            
+            friends.forEach(friend => {
+                selector.innerHTML += `<option value="${friend.id}">${friend.username}</option>`;
+            });
+        }
+        
+        // Add friend
+        async function addFriend() {
+            const friendUsername = document.getElementById('friend-username').value.trim();
+            if (!friendUsername) return;
+            
+            try {
+                const response = await fetch('/api/add-friend', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${sessionToken}`
+                    },
+                    body: JSON.stringify({
+                        user_id: currentUser.user_id,
+                        friend_username: friendUsername
+                    })
+                });
+                
+                if (response.ok) {
+                    showNotification('Friend added successfully!', 'success');
+                    document.getElementById('friend-username').value = '';
+                    loadFriends();
+            } else {
+                    const data = await response.json();
+                    showNotification(data.error || 'Failed to add friend', 'error');
+                }
+            } catch (error) {
+                console.error('Add friend error:', error);
+                showNotification('Connection error', 'error');
+            }
+        }
+        
+        // Refresh locations
+        function refreshLocations() {
+            loadFriendsLocations();
+            showNotification('Locations refreshed', 'success');
+        }
+        
+        // Load friends locations
+        async function loadFriendsLocations() {
+            try {
+                const response = await fetch('/api/friends/locations', {
+                    headers: {
+                        'Authorization': `Bearer ${sessionToken}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const locations = await response.json();
+                    updateFriendMarkers(locations);
+                }
+            } catch (error) {
+                console.error('Load friends locations error:', error);
+            }
+        }
+        
+        // Update friend markers on map
+        function updateFriendMarkers(locations) {
+            // Clear existing markers
+            Object.values(friendMarkers).forEach(marker => map.removeLayer(marker));
+            friendMarkers = {};
+            
+            // Add new markers
+            locations.forEach(location => {
+                const marker = L.marker([location.latitude, location.longitude], {
+                    icon: L.divIcon({
+                        className: 'friend-marker',
+                        html: `<i class="fas fa-user-friends" style="color: #48bb78;"></i>`,
+                        iconSize: [20, 20]
+                    })
+                }).addTo(map).bindPopup(`
+                    <b>${location.username}</b><br>
+                    ${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}<br>
+                    <small>${new Date(location.timestamp).toLocaleString()}</small>
+                `);
+                
+                friendMarkers[location.user_id] = marker;
+            });
+        }
+        
+        // Focus on friend location
+        function focusOnFriend(friendId) {
+            if (friendMarkers[friendId]) {
+                const marker = friendMarkers[friendId];
+                map.setView(marker.getLatLng(), 15);
+                marker.openPopup();
+            }
+        }
+        
+        // Calculate route
+        async function calculateRoute() {
+            const algorithm = document.getElementById('route-algorithm').value;
+            const friendId = document.getElementById('friend-selector').value;
+            
+            if (!friendId) {
+                showNotification('Please select a friend', 'error');
+                return;
+            }
+            
+            if (!userMarker) {
+                showNotification('Please share your location first', 'error');
+                return;
+            }
+            
+            const userPos = userMarker.getLatLng();
+            const endpoint = algorithm === 'h3' ? '/api/distance/h3' : '/api/distance/astar';
+            
+            try {
+                const response = await fetch(`${endpoint}?user1=${currentUser.user_id}&user2=${friendId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${sessionToken}`
+                    }
+                });
+                
+                if (response.ok) {
+                const data = await response.json();
+                    displayRouteInfo(data, algorithm);
+                    
+                    // Draw route on map
+                    if (friendMarkers[friendId]) {
+                        const friendPos = friendMarkers[friendId].getLatLng();
+                        drawRoute(userPos, friendPos);
+                    }
+                } else {
+                    showNotification('Failed to calculate route', 'error');
+                }
+            } catch (error) {
+                console.error('Calculate route error:', error);
+                showNotification('Connection error', 'error');
+            }
+        }
+        
+        // Display route information
+        function displayRouteInfo(data, algorithm) {
+            const routeInfo = document.getElementById('route-info');
+            const routeDetails = document.getElementById('route-details');
+            
+            routeDetails.innerHTML = `
+                <p><strong>Algorithm:</strong> ${algorithm.toUpperCase()}</p>
+                <p><strong>Distance:</strong> ${data.distance.toFixed(2)} ${data.unit}</p>
+                <p><strong>Calculated at:</strong> ${new Date().toLocaleTimeString()}</p>
+            `;
+            
+            routeInfo.classList.add('active');
+        }
+        
+        // Draw route on map
+        function drawRoute(start, end) {
+            if (routePolyline) {
+                map.removeLayer(routePolyline);
+            }
+            
+            routePolyline = L.polyline([start, end], {
+                color: '#667eea',
+                weight: 4,
+                opacity: 0.8
+            }).addTo(map);
+            
+            // Fit map to show both points
+            map.fitBounds([start, end], { padding: [50, 50] });
+        }
+        
+        // Start location updates
+        function startLocationUpdates() {
+            // Load initial locations
+            loadFriendsLocations();
+            
+            // Update every 30 seconds
+            setInterval(() => {
+                loadFriendsLocations();
+            }, 30000);
+        }
         
         // Show notification
         function showNotification(message, type = 'success') {
@@ -566,266 +983,8 @@
             }, 3000);
         }
         
-        // Function to load coordinates from API
-        async function loadCoordinates() {
-            try {
-                const response = await fetch('/api/coordinates');
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                
-                const data = await response.json();
-                updateMap(data);
-                updateInfoPanel(data);
-                updateStats(data);
-            } catch (error) {
-                console.error('Error loading coordinates:', error);
-                document.getElementById('coordinates-info').innerHTML = 
-                    '<div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Error loading data. Is the server running?</p></div>';
-                showNotification('Error loading data', 'error');
-            }
-        }
-        
-        // Function to update the map with new coordinates
-        function updateMap(coordinates) {
-            // Clear existing markers, lines, and paths
-            markers.forEach(marker => map.removeLayer(marker));
-            directLines.forEach(line => map.removeLayer(line));
-            h3Paths.forEach(path => map.removeLayer(path));
-            markers.length = 0;
-            directLines.length = 0;
-            h3Paths.length = 0;
-            
-            // Add new markers and lines
-            coordinates.forEach(coord => {
-                // Add marker for first location
-                const marker1 = L.marker([coord.first_lat, coord.first_lon])
-                    .addTo(map)
-                    .bindPopup(`
-                        <div style="text-align: center;">
-                            <b>${coord.first_name}</b><br>
-                            <small>(${coord.first_lat.toFixed(4)}, ${coord.first_lon.toFixed(4)})</small><br>
-                            <small>H3: ${coord.first_h3}</small>
-                        </div>
-                    `);
-                markers.push(marker1);
-                
-                // Add marker for second location
-                const marker2 = L.marker([coord.second_lat, coord.second_lon])
-                    .addTo(map)
-                    .bindPopup(`
-                        <div style="text-align: center;">
-                            <b>${coord.second_name}</b><br>
-                            <small>(${coord.second_lat.toFixed(4)}, ${coord.second_lon.toFixed(4)})</small><br>
-                            <small>H3: ${coord.second_h3}</small>
-                        </div>
-                    `);
-                markers.push(marker2);
-                
-                // Draw direct line between the two points
-                const directLine = L.polyline([
-                    [coord.first_lat, coord.first_lon],
-                    [coord.second_lat, coord.second_lon]
-                ], {
-                    color: '#667eea',
-                    weight: 3,
-                    opacity: 0.7,
-                    dashArray: '10, 10'
-                }).addTo(map);
-                directLines.push(directLine);
-                
-                // Draw H3 path if available
-                if (coord.h3_path && coord.h3_path.length > 0) {
-                    const pathPoints = coord.h3_path.map(point => [point.lat, point.lng]);
-                    const h3Path = L.polyline(pathPoints, {
-                        color: '#ff6b6b',
-                        weight: 4,
-                        opacity: 0.8
-                    }).addTo(map);
-                    h3Paths.push(h3Path);
-                    
-                    // Add markers for path points (every 5th point to avoid clutter)
-                    for (let i = 0; i < coord.h3_path.length; i += 5) {
-                        const point = coord.h3_path[i];
-                        const pathMarker = L.circleMarker([point.lat, point.lng], {
-                            radius: 3,
-                            fillColor: '#ff6b6b',
-                            color: '#fff',
-                            weight: 1,
-                            opacity: 1,
-                            fillOpacity: 0.8
-                        }).addTo(map);
-                        markers.push(pathMarker);
-                    }
-                }
-            });
-            
-            // Fit map to bounds if we have markers
-            if (markers.length > 0) {
-                const group = new L.featureGroup(markers);
-                map.fitBounds(group.getBounds().pad(0.1));
-            }
-        }
-        
-        // Function to update the info panel
-        function updateInfoPanel(coordinates) {
-            const infoDiv = document.getElementById('coordinates-info');
-            
-            if (coordinates.length === 0) {
-                infoDiv.innerHTML = '<div class="empty-state"><i class="fas fa-database"></i><p>No coordinates found in database.</p><small>Add some coordinates to get started!</small></div>';
-                return;
-            }
-            
-            let html = '<div class="coordinates-list">';
-            
-            coordinates.forEach(coord => {
-                // Calculate path length if available
-                let pathInfo = '';
-                if (coord.h3_path && coord.h3_path.length > 0) {
-                    // Calculate approximate path distance (sum of distances between consecutive points)
-                    let pathDistance = 0;
-                    for (let i = 1; i < coord.h3_path.length; i++) {
-                        const prev = coord.h3_path[i-1];
-                        const curr = coord.h3_path[i];
-                        // Simple distance calculation (inaccurate but for display purposes)
-                        const dist = Math.sqrt(Math.pow(curr.lat - prev.lat, 2) + Math.pow(curr.lng - prev.lng, 2));
-                        pathDistance += dist;
-                    }
-                    pathInfo = `
-                        <div class="path-info">
-                            <span class="path-label">H3 Path Length:</span>
-                            <span class="path-value">${coord.h3_path.length} cells</span>
-                        </div>
-                    `;
-                }
-                
-                html += `
-                    <div class="coordinate-item" onclick="zoomToCoordinate(${coord.first_lat}, ${coord.first_lon}, ${coord.second_lat}, ${coord.second_lon})">
-                        <div class="location-names">
-                            <div class="location-name">${coord.first_name}</div>
-                            <div class="distance">${coord.distance.toFixed(2)} km</div>
-                            <div class="location-name">${coord.second_name}</div>
-                        </div>
-                        
-                        <div class="coordinates">
-                            <div class="coord-box">
-                                <div class="coord-label">Lat/Lon</div>
-                                <div class="coord-value">${coord.first_lat.toFixed(4)}, ${coord.first_lon.toFixed(4)}</div>
-                            </div>
-                            <div class="coord-box">
-                                <div class="coord-label">Lat/Lon</div>
-                                <div class="coord-value">${coord.second_lat.toFixed(4)}, ${coord.second_lon.toFixed(4)}</div>
-                            </div>
-                        </div>
-                        
-                        <div class="h3-indexes">
-                            <span class="h3-label">H3:</span>
-                            <span class="h3-value">${coord.first_h3}</span>
-                            <span class="h3-label">→</span>
-                            <span class="h3-value">${coord.second_h3}</span>
-                        </div>
-                        
-                        ${pathInfo}
-                    </div>
-                `;
-            });
-            
-            html += '</div>';
-            infoDiv.innerHTML = html;
-        }
-        
-        // Function to update statistics
-        function updateStats(coordinates) {
-            const totalCount = document.getElementById('total-count');
-            const avgDistance = document.getElementById('avg-distance');
-            const maxDistance = document.getElementById('max-distance');
-            
-            totalCount.textContent = coordinates.length;
-            
-            if (coordinates.length > 0) {
-                const totalDistance = coordinates.reduce((sum, coord) => sum + coord.distance, 0);
-                const average = totalDistance / coordinates.length;
-                const max = Math.max(...coordinates.map(coord => coord.distance));
-                
-                avgDistance.textContent = average.toFixed(1);
-                maxDistance.textContent = max.toFixed(1);
-            } else {
-                avgDistance.textContent = '0';
-                maxDistance.textContent = '0';
-            }
-        }
-        
-        // Function to zoom to coordinate pair
-        function zoomToCoordinate(lat1, lon1, lat2, lon2) {
-            const bounds = L.latLngBounds([
-                [lat1, lon1],
-                [lat2, lon2]
-            ]);
-            map.fitBounds(bounds, { padding: [50, 50] });
-        }
-        
-        // Event listener for refresh button
-        document.getElementById('refresh-btn').addEventListener('click', () => {
-            loadCoordinates();
-            showNotification('Data refreshed successfully');
-        });
-        
-        // Event listener for add button
-        document.getElementById('add-btn').addEventListener('click', () => {
-            document.getElementById('search-box').classList.toggle('active');
-        });
-        
-        // Event listener for close panel button
-        document.getElementById('close-panel').addEventListener('click', () => {
-            document.querySelector('.info-panel').style.display = 'none';
-        });
-        
-        // Event listener for coordinate form
-        document.getElementById('coordinate-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const formData = {
-                name1: document.getElementById('name1').value,
-                lat1: parseFloat(document.getElementById('lat1').value),
-                lon1: parseFloat(document.getElementById('lon1').value),
-                name2: document.getElementById('name2').value,
-                lat2: parseFloat(document.getElementById('lat2').value),
-                lon2: parseFloat(document.getElementById('lon2').value)
-            };
-            
-            try {
-                const response = await fetch('/calculate-distance', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(formData)
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                
-                const result = await response.json();
-                showNotification(`Distance calculated: ${result.distance.toFixed(2)} km`);
-                
-                // Reset form
-                document.getElementById('coordinate-form').reset();
-                document.getElementById('search-box').classList.remove('active');
-                
-                // Refresh data
-                loadCoordinates();
-            } catch (error) {
-                console.error('Error calculating distance:', error);
-                showNotification('Error calculating distance', 'error');
-            }
-        });
-        
-        // Load coordinates when page loads
-        window.addEventListener('load', loadCoordinates);
-        
-        // Refresh data every 30 seconds
-        setInterval(loadCoordinates, 30000);
+        // Initialize app when page loads
+        window.addEventListener('load', initApp);
     </script>
 </body>
 </html>

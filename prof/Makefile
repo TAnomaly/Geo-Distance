@@ -1,48 +1,110 @@
-# Makefile for coordinate_logger project
-
-# Compiler and flags
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c99 -I/usr/include/postgresql -I/usr/include/json-c -I/usr/local/include -Isrc
-LIBS_LOGGER = -lpq -lm -lh3
-LIBS_API = -lpq -lm -ljson-c -lmicrohttpd -lh3
+CFLAGS = -Wall -Wextra -std=c99 -g -O2 -I/usr/include/postgresql -I/usr/local/include
+LDFLAGS = -lmicrohttpd -ljson-c -lpq -lssl -lcrypto -lh3 -lm -L/usr/local/lib
 
 # Directories
-SRC_DIR = src
-BUILD_DIR = build
-WEB_DIR = web
-
-# Executable names
-TARGET_LOGGER = coordinate_logger
-TARGET_API = api_server
+SRCDIR = src
+BUILDDIR = build
+AUTHDIR = $(SRCDIR)/auth
+LOCATIONDIR = $(SRCDIR)/location
+ROUTINGDIR = $(SRCDIR)/routing
+UTILSDIR = $(SRCDIR)/utils
 
 # Source files
-SRCS_LOGGER_LIB = $(SRC_DIR)/coordinate_logger.c
-SRCS_LOGGER_MAIN = $(SRC_DIR)/cli_main.c
-SRCS_API = $(SRC_DIR)/api_server.c $(SRC_DIR)/coordinate_logger.c
+MAIN_SRC = $(SRCDIR)/main.c
+API_SERVER_SRC = $(SRCDIR)/api_server.c
+AUTH_SRC = $(AUTHDIR)/auth.c
+LOCATION_SRC = $(LOCATIONDIR)/location.c
+ROUTING_SRC = $(ROUTINGDIR)/routing.c
+UTILS_SRC = $(UTILSDIR)/utils.c
+COORDINATE_LOGGER_SRC = $(SRCDIR)/coordinate_logger.c
+
+# Object files
+MAIN_OBJ = $(BUILDDIR)/main.o
+API_SERVER_OBJ = $(BUILDDIR)/api_server.o
+AUTH_OBJ = $(BUILDDIR)/auth.o
+LOCATION_OBJ = $(BUILDDIR)/location.o
+ROUTING_OBJ = $(BUILDDIR)/routing.o
+UTILS_OBJ = $(BUILDDIR)/utils.o
+COORDINATE_LOGGER_OBJ = $(BUILDDIR)/coordinate_logger.o
+
+# Target executable
+TARGET = $(BUILDDIR)/location_sharing_system
 
 # Default target
-all: $(BUILD_DIR) $(TARGET_LOGGER) $(TARGET_API)
+all: $(TARGET)
 
 # Create build directory
-$(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
+$(BUILDDIR):
+	mkdir -p $(BUILDDIR)
 
-# Build the logger executable
-$(TARGET_LOGGER): $(SRCS_LOGGER_LIB) $(SRCS_LOGGER_MAIN)
-	$(CC) $(CFLAGS) -o $(BUILD_DIR)/$@ $^ $(LIBS_LOGGER)
+# Build main executable
+$(TARGET): $(BUILDDIR) $(MAIN_OBJ) $(API_SERVER_OBJ) $(AUTH_OBJ) $(LOCATION_OBJ) $(ROUTING_OBJ) $(UTILS_OBJ) $(COORDINATE_LOGGER_OBJ)
+	$(CC) $(MAIN_OBJ) $(API_SERVER_OBJ) $(AUTH_OBJ) $(LOCATION_OBJ) $(ROUTING_OBJ) $(UTILS_OBJ) $(COORDINATE_LOGGER_OBJ) -o $(TARGET) $(LDFLAGS)
 
-# Build the API server executable
-$(TARGET_API): $(SRCS_API)
-	$(CC) $(CFLAGS) -o $(BUILD_DIR)/$@ $^ $(LIBS_API)
+# Compile main.c
+$(MAIN_OBJ): $(MAIN_SRC) $(SRCDIR)/api_server.h $(SRCDIR)/api.h
+	$(CC) $(CFLAGS) -c $(MAIN_SRC) -o $(MAIN_OBJ)
 
-# Install web files
-install-web:
-	mkdir -p $(BUILD_DIR)/web
-	cp -r $(WEB_DIR)/* $(BUILD_DIR)/web/
+# Compile api_server.c
+$(API_SERVER_OBJ): $(API_SERVER_SRC) $(SRCDIR)/api_server.h $(SRCDIR)/api.h $(AUTHDIR)/auth.h $(LOCATIONDIR)/location.h $(ROUTINGDIR)/routing.h $(UTILSDIR)/utils.h
+	$(CC) $(CFLAGS) -c $(API_SERVER_SRC) -o $(API_SERVER_OBJ)
 
-# Clean build artifacts
+# Compile auth.c
+$(AUTH_OBJ): $(AUTH_SRC) $(AUTHDIR)/auth.h $(SRCDIR)/api.h
+	$(CC) $(CFLAGS) -c $(AUTH_SRC) -o $(AUTH_OBJ)
+
+# Compile location.c
+$(LOCATION_OBJ): $(LOCATION_SRC) $(LOCATIONDIR)/location.h $(SRCDIR)/api.h
+	$(CC) $(CFLAGS) -c $(LOCATION_SRC) -o $(LOCATION_OBJ)
+
+# Compile routing.c
+$(ROUTING_OBJ): $(ROUTING_SRC) $(ROUTINGDIR)/routing.h $(SRCDIR)/api.h $(LOCATIONDIR)/location.h
+	$(CC) $(CFLAGS) -c $(ROUTING_SRC) -o $(ROUTING_OBJ)
+
+# Compile utils.c
+$(UTILS_OBJ): $(UTILS_SRC) $(UTILSDIR)/utils.h
+	$(CC) $(CFLAGS) -c $(UTILS_SRC) -o $(UTILS_OBJ)
+
+# Compile coordinate_logger.c
+$(COORDINATE_LOGGER_OBJ): $(COORDINATE_LOGGER_SRC) $(SRCDIR)/coordinate_logger.h $(SRCDIR)/api.h
+	$(CC) $(CFLAGS) -c $(COORDINATE_LOGGER_SRC) -o $(COORDINATE_LOGGER_OBJ)
+
+# Clean build files
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BUILDDIR)
 
-# Phony targets
-.PHONY: all clean install-web
+# Install dependencies (Ubuntu/Debian)
+install-deps:
+	sudo apt-get update
+	sudo apt-get install -y libmicrohttpd-dev libjson-c-dev libpq-dev libssl-dev libh3-dev
+
+# Install dependencies (CentOS/RHEL/Fedora)
+install-deps-rpm:
+	sudo yum install -y libmicrohttpd-devel json-c-devel postgresql-devel openssl-devel h3-devel
+
+# Run the application
+run: $(TARGET)
+	./$(TARGET)
+
+# Debug build
+debug: CFLAGS += -DDEBUG -g3
+debug: $(TARGET)
+
+# Release build
+release: CFLAGS += -DNDEBUG -O3
+release: $(TARGET)
+
+# Show help
+help:
+	@echo "Available targets:"
+	@echo "  all          - Build the application (default)"
+	@echo "  clean        - Remove build files"
+	@echo "  install-deps - Install dependencies (Ubuntu/Debian)"
+	@echo "  install-deps-rpm - Install dependencies (CentOS/RHEL/Fedora)"
+	@echo "  run          - Build and run the application"
+	@echo "  debug        - Build with debug flags"
+	@echo "  release      - Build with release optimization"
+	@echo "  help         - Show this help message"
+
+.PHONY: all clean install-deps install-deps-rpm run debug release help

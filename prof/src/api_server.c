@@ -1,140 +1,39 @@
+#define _GNU_SOURCE
+#include "api_server.h"
 #include "api.h"
+#include "auth/auth.h"
+#include "location/location.h"
+#include "routing/routing.h"
+#include "utils/utils.h"
 #include "coordinate_logger.h"
 #include <json-c/json.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <libgen.h>
+#include <time.h>
 
-// Helper function to read file content
-char* read_file_content(const char *filepath) {
-    FILE *file = fopen(filepath, "rb");
-    if (!file) {
-        return NULL;
+// Start the API server
+struct MHD_Daemon* start_api_server(void) {
+    printf("DEBUG: Starting API server on port %d\n", PORT);
+    fflush(stdout);
+    
+    struct MHD_Daemon* daemon = MHD_start_daemon(MHD_USE_INTERNAL_POLLING_THREAD, PORT, NULL, NULL,
+                           &handle_request, NULL, MHD_OPTION_END);
+    
+    if (daemon == NULL) {
+        fprintf(stderr, "DEBUG: MHD_start_daemon failed\n");
+        fflush(stderr);
+    } else {
+        printf("DEBUG: API server started successfully\n");
+        fflush(stdout);
     }
     
-    fseek(file, 0, SEEK_END);
-    long length = ftell(file);
-    fseek(file, 0, SEEK_SET);
-    
-    char *content = malloc(length + 1);
-    if (!content) {
-        fclose(file);
-        return NULL;
-    }
-    
-    fread(content, 1, length, file);
-    content[length] = '\0';
-    fclose(file);
-    
-    return content;
+    return daemon;
 }
-
-// Helper function to get content type based on file extension
-const char* get_content_type(const char *url) {
-    const char *dot = strrchr(url, '.');
-    if (!dot) return "text/plain";
-    
-    if (strcmp(dot, ".html") == 0) return "text/html";
-    if (strcmp(dot, ".css") == 0) return "text/css";
-    if (strcmp(dot, ".js") == 0) return "application/javascript";
-    if (strcmp(dot, ".json") == 0) return "application/json";
-    if (strcmp(dot, ".png") == 0) return "image/png";
-    if (strcmp(dot, ".jpg") == 0) return "image/jpeg";
-    if (strcmp(dot, ".gif") == 0) return "image/gif";
-    
-    return "text/plain";
-}
-
-// Function to retrieve coordinates from database
-json_object* get_coordinates_from_db() {
-    PGconn *conn = PQconnectdb(CONN_STR);
-    if (PQstatus(conn) != CONNECTION_OK) {
-        fprintf(stderr, "Database connection failed: %s", PQerrorMessage(conn));
-        PQfinish(conn);
-        return NULL;
-    }
-    
-    const char *query = "SELECT first_name, first_lat, first_lon, first_h3, second_name, second_lat, second_lon, second_h3, distance FROM coordinates ORDER BY id DESC LIMIT 100;";
-    PGresult *res = PQexec(conn, query);
-    
-    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
-        fprintf(stderr, "Query failed: %s", PQerrorMessage(conn));
-        PQclear(res);
-        PQfinish(conn);
-        return NULL;
-    }
-    
-    int rows = PQntuples(res);
-    json_object *coordinates_array = json_object_new_array();
-    
-    for (int i = 0; i < rows; i++) {
-        json_object *coord_obj = json_object_new_object();
-        
-        json_object_object_add(coord_obj, "first_name", json_object_new_string(PQgetvalue(res, i, 0)));
-        json_object_object_add(coord_obj, "first_lat", json_object_new_double(atof(PQgetvalue(res, i, 1))));
-        json_object_object_add(coord_obj, "first_lon", json_object_new_double(atof(PQgetvalue(res, i, 2))));
-        json_object_object_add(coord_obj, "first_h3", json_object_new_string(PQgetvalue(res, i, 3)));
-        json_object_object_add(coord_obj, "second_name", json_object_new_string(PQgetvalue(res, i, 4)));
-        json_object_object_add(coord_obj, "second_lat", json_object_new_double(atof(PQgetvalue(res, i, 5))));
-        json_object_object_add(coord_obj, "second_lon", json_object_new_double(atof(PQgetvalue(res, i, 6))));
-        json_object_object_add(coord_obj, "second_h3", json_object_new_string(PQgetvalue(res, i, 7)));
-        json_object_object_add(coord_obj, "distance", json_object_new_double(atof(PQgetvalue(res, i, 8))));
-        
-        // Convert H3 strings back to H3Index for path calculation
-        H3Index first_h3, second_h3;
-        H3Error err1 = stringToH3(PQgetvalue(res, i, 3), &first_h3);
-        H3Error err2 = stringToH3(PQgetvalue(res, i, 7), &second_h3);
-        
-        if (err1 == E_SUCCESS && err2 == E_SUCCESS) {
-            // Calculate path between H3 indexes
-            H3Index *path = NULL;
-            int pathSize = get_h3_path(first_h3, second_h3, &path);
-            
-            if (pathSize > 0 && path != NULL) {
-                // Create JSON array for path
-                json_object *path_array = json_object_new_array();
-                
-                // Convert each H3 index in path to lat/lng and add to JSON array
-                for (int j = 0; j < pathSize; j++) {
-                    LatLng latLng;
-                    H3Error err = cellToLatLng(path[j], &latLng);
-                    if (err == E_SUCCESS) {
-                        json_object *point_obj = json_object_new_object();
-                        json_object_object_add(point_obj, "lat", json_object_new_double(radsToDegs(latLng.lat)));
-                        json_object_object_add(point_obj, "lng", json_object_new_double(radsToDegs(latLng.lng)));
-                        
-                        // Convert H3 index to string for display
-                        char h3_str[17];
-                        h3ToString(path[j], h3_str, 17);
-                        json_object_object_add(point_obj, "h3", json_object_new_string(h3_str));
-                        
-                        json_object_array_add(path_array, point_obj);
-                    }
-                }
-                
-                json_object_object_add(coord_obj, "h3_path", path_array);
-                free(path);
-            } else {
-                // If path calculation failed, add empty array
-                json_object *path_array = json_object_new_array();
-                json_object_object_add(coord_obj, "h3_path", path_array);
-            }
-        } else {
-            // If H3 conversion failed, add empty array
-            json_object *path_array = json_object_new_array();
-            json_object_object_add(coord_obj, "h3_path", path_array);
-        }
-        
-        json_object_array_add(coordinates_array, coord_obj);
-    }
-    
-    PQclear(res);
-    PQfinish(conn);
-    
-    return coordinates_array;
-}
-
-// Handle HTTP requests
+ 
+ 
+ 
+ // Handle HTTP requests
 enum MHD_Result handle_request(void *cls __attribute__((unused)), struct MHD_Connection *connection,
                    const char *url, const char *method,
                    const char *version __attribute__((unused)), const char *upload_data,
@@ -144,206 +43,780 @@ enum MHD_Result handle_request(void *cls __attribute__((unused)), struct MHD_Con
     printf("Received request: %s %s\n", method, url);
     fflush(stdout);
     
-    // Handle GET requests for web files
+    // Handle GET requests
     if (strcmp(method, "GET") == 0) {
-        // Serve index.html for root path
-        if (strcmp(url, "/") == 0) {
-            char filepath[512];
-            snprintf(filepath, sizeof(filepath), "%s/index.html", WEB_ROOT);
-            
-            char *content = read_file_content(filepath);
-            if (!content) {
-                const char *error_msg = "{\"error\": \"File not found\"}";
-                struct MHD_Response *response = MHD_create_response_from_buffer(strlen(error_msg), 
-                                                                               (void *)error_msg, 
-                                                                               MHD_RESPMEM_MUST_COPY);
-                enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_NOT_FOUND, response);
-                MHD_destroy_response(response);
-                return ret;
-            }
-            
-            struct MHD_Response *response = MHD_create_response_from_buffer(strlen(content), 
-                                                                           (void *)content, 
-                                                                           MHD_RESPMEM_MUST_FREE);
-            MHD_add_response_header(response, "Content-Type", "text/html");
-            enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
-            MHD_destroy_response(response);
-            return ret;
-        }
-        
-        // Serve coordinates API endpoint
-        if (strcmp(url, "/api/coordinates") == 0) {
-            json_object *coordinates = get_coordinates_from_db();
-            if (!coordinates) {
-                const char *error_msg = "{\"error\": \"Failed to retrieve coordinates\"}";
-                struct MHD_Response *response = MHD_create_response_from_buffer(strlen(error_msg), 
-                                                                               (void *)error_msg, 
-                                                                               MHD_RESPMEM_MUST_COPY);
-                enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_INTERNAL_SERVER_ERROR, response);
-                MHD_destroy_response(response);
-                return ret;
-            }
-            
-            const char *json_str = json_object_to_json_string(coordinates);
-            struct MHD_Response *response = MHD_create_response_from_buffer(strlen(json_str), 
-                                                                           (void *)json_str, 
-                                                                           MHD_RESPMEM_MUST_COPY);
-            MHD_add_response_header(response, "Content-Type", "application/json");
-            enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
-            MHD_destroy_response(response);
-            json_object_put(coordinates);
-            return ret;
-        }
-        
-        // Serve static files from web directory
-        if (strncmp(url, "/web/", 5) == 0) {
-            char filepath[512];
-            snprintf(filepath, sizeof(filepath), "%s%s", WEB_ROOT, url + 4); // Remove /web prefix
-            
-            char *content = read_file_content(filepath);
-            if (!content) {
-                const char *error_msg = "{\"error\": \"File not found\"}";
-                struct MHD_Response *response = MHD_create_response_from_buffer(strlen(error_msg), 
-                                                                               (void *)error_msg, 
-                                                                               MHD_RESPMEM_MUST_COPY);
-                enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_NOT_FOUND, response);
-                MHD_destroy_response(response);
-                return ret;
-            }
-            
-            struct MHD_Response *response = MHD_create_response_from_buffer(strlen(content), 
-                                                                           (void *)content, 
-                                                                           MHD_RESPMEM_MUST_FREE);
-            MHD_add_response_header(response, "Content-Type", get_content_type(url));
-            enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
-            MHD_destroy_response(response);
-            return ret;
-        }
+        return handle_get_request(connection, url);
     }
     
-    // Only accept POST requests to /calculate-distance
-    if (strcmp(method, "POST") != 0 || strcmp(url, "/calculate-distance") != 0) {
-        const char *error_msg = "{\"error\": \"Invalid method or endpoint\"}";
-        struct MHD_Response *response = MHD_create_response_from_buffer(strlen(error_msg), 
-                                                                       (void *)error_msg, 
-                                                                       MHD_RESPMEM_MUST_COPY);
-        enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_BAD_REQUEST, response);
+    // Handle POST requests
+    if (strcmp(method, "POST") == 0) {
+        return handle_post_request(connection, url, upload_data, upload_data_size, con_cls);
+    }
+    
+    // Handle OPTIONS requests for CORS preflight
+    if (strcmp(method, "OPTIONS") == 0) {
+        return handle_options_request(connection);
+    }
+    
+    // Method not allowed
+    struct MHD_Response *response = create_error_response("Method not allowed", MHD_HTTP_METHOD_NOT_ALLOWED);
+    enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_METHOD_NOT_ALLOWED, response);
+                MHD_destroy_response(response);
+                return ret;
+            }
+            
+// Handle GET requests
+enum MHD_Result handle_get_request(struct MHD_Connection *connection, const char *url) {
+    // Serve index.html for root path
+    if (strcmp(url, "/") == 0) {
+        char filepath[512];
+        snprintf(filepath, sizeof(filepath), "%s/index.html", WEB_ROOT);
+        return serve_static_file(connection, filepath, "text/html");
+    }
+    
+    // API endpoints
+        if (strcmp(url, "/api/user") == 0) {
+        return handle_get_user_info(connection);
+    }
+    
+    if (strcmp(url, "/api/friends") == 0) {
+        return handle_get_friends(connection);
+    }
+    
+    if (strcmp(url, "/api/friends/locations") == 0) {
+        return handle_get_friends_locations(connection);
+    }
+    
+    if (strcmp(url, "/api/route") == 0) {
+        return handle_get_route(connection);
+    }
+    
+    if (strcmp(url, "/api/distance/h3") == 0) {
+        return handle_get_h3_distance(connection);
+    }
+    
+    if (strcmp(url, "/api/distance/astar") == 0) {
+        return handle_get_astar_distance(connection);
+    }
+    
+    // Serve static files from web directory
+    if (strncmp(url, "/web/", 5) == 0) {
+        char filepath[512];
+        snprintf(filepath, sizeof(filepath), "%s%s", WEB_ROOT, url + 4); // Remove /web prefix
+        return serve_static_file(connection, filepath, get_content_type(url));
+    }
+    
+    // Not found
+    struct MHD_Response *response = create_error_response("Not found", MHD_HTTP_NOT_FOUND);
+    enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_NOT_FOUND, response);
+                MHD_destroy_response(response);
+                return ret;
+            }
+            
+
+
+
+
+// Handle POST requests
+enum MHD_Result handle_post_request(struct MHD_Connection *connection, const char *url, 
+                                   const char *upload_data, size_t *upload_data_size, void **con_cls) {
+    printf("DEBUG: POST request - upload_data_size: %zu, con_cls: %p\n", *upload_data_size, (void*)*con_cls);
+    
+    // For now, just return a success response for testing
+    printf("DEBUG: Returning test success response\n");
+    
+    const char *response_text = "{\"success\": \"Test response\"}";
+    struct MHD_Response *response = MHD_create_response_from_buffer(strlen(response_text), 
+                                                                   (void *)response_text, 
+                                                                   MHD_RESPMEM_PERSISTENT);
+    MHD_add_response_header(response, "Content-Type", "application/json");
+    MHD_add_response_header(response, "Access-Control-Allow-Origin", "*");
+    MHD_add_response_header(response, "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    MHD_add_response_header(response, "Access-Control-Allow-Headers", "Content-Type, Authorization");
+    MHD_add_response_header(response, "Access-Control-Allow-Credentials", "true");
+    
+    enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
+    printf("DEBUG: Queued test response, result: %d\n", ret);
+    
+    return ret;
+}
+
+// Process complete POST data
+enum MHD_Result process_post_data(struct MHD_Connection *connection, const char *url, 
+                                 const char *post_data, size_t post_data_size) {
+    // API endpoints
+    if (strcmp(url, "/api/register") == 0) {
+        return handle_post_register(connection, post_data, post_data_size);
+    }
+    
+    if (strcmp(url, "/api/login") == 0) {
+        return handle_post_login(connection, post_data, post_data_size);
+    }
+    
+    if (strcmp(url, "/api/logout") == 0) {
+        return handle_post_logout(connection);
+    }
+    
+    if (strcmp(url, "/api/save-location") == 0) {
+        return handle_post_save_location(connection, post_data, post_data_size);
+    }
+    
+    if (strcmp(url, "/api/add-friend") == 0) {
+        return handle_post_add_friend(connection, post_data, post_data_size);
+    }
+    
+    if (strcmp(url, "/calculate-distance") == 0) {
+        return handle_post_calculate_distance(connection, post_data, post_data_size);
+    }
+    
+    // Not found
+    struct MHD_Response *response = create_error_response("Not found", MHD_HTTP_NOT_FOUND);
+    enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_NOT_FOUND, response);
+                    MHD_destroy_response(response);
+                    return ret;
+                }
+                
+// Handle OPTIONS requests
+enum MHD_Result handle_options_request(struct MHD_Connection *connection) {
+    struct MHD_Response *response = MHD_create_response_from_buffer(0, NULL, MHD_RESPMEM_PERSISTENT);
+    enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_OK, response);
+                MHD_destroy_response(response);
+                return ret;
+}
+
+// Serve static file
+enum MHD_Result serve_static_file(struct MHD_Connection *connection, const char *filepath, const char *content_type) {
+            char *content = read_file_content(filepath);
+            if (!content) {
+        struct MHD_Response *response = create_error_response("File not found", MHD_HTTP_NOT_FOUND);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_NOT_FOUND, response);
+                MHD_destroy_response(response);
+                return ret;
+            }
+            
+            struct MHD_Response *response = MHD_create_response_from_buffer(strlen(content), 
+                                                                           (void *)content, 
+                                                                           MHD_RESPMEM_MUST_FREE);
+    MHD_add_response_header(response, "Content-Type", content_type);
+    enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_OK, response);
+            MHD_destroy_response(response);
+            return ret;
+        }
+
+// Handle user registration
+enum MHD_Result handle_post_register(struct MHD_Connection *connection, const char *post_data, size_t post_data_size) {
+    if (!post_data || post_data_size == 0) {
+        struct MHD_Response *response = create_error_response("No data received", MHD_HTTP_BAD_REQUEST);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_BAD_REQUEST, response);
         MHD_destroy_response(response);
         return ret;
     }
-
-    // If no data, wait for it
-    if (*upload_data_size == 0) {
-        *con_cls = (void *)1; // Mark that we're waiting for data
-        return MHD_YES;
-    }
-
-    // Get JSON data from request body
-    const char *data = upload_data;
-    if (*upload_data_size != 0) {
-        // Parse JSON
-        json_object *json_obj = json_tokener_parse(data);
-        if (!json_obj) {
-            const char *error_msg = "{\"error\": \"Invalid JSON\"}";
-            struct MHD_Response *response = MHD_create_response_from_buffer(strlen(error_msg), 
-                                                                           (void *)error_msg, 
-                                                                           MHD_RESPMEM_MUST_COPY);
-            enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_BAD_REQUEST, response);
-            MHD_destroy_response(response);
-            return ret;
-        }
-
-        // Extract values from JSON
-        json_object *name1_obj, *lat1_obj, *lon1_obj, *name2_obj, *lat2_obj, *lon2_obj;
-        if (!json_object_object_get_ex(json_obj, "name1", &name1_obj) ||
-            !json_object_object_get_ex(json_obj, "lat1", &lat1_obj) ||
-            !json_object_object_get_ex(json_obj, "lon1", &lon1_obj) ||
-            !json_object_object_get_ex(json_obj, "name2", &name2_obj) ||
-            !json_object_object_get_ex(json_obj, "lat2", &lat2_obj) ||
-            !json_object_object_get_ex(json_obj, "lon2", &lon2_obj)) {
+    
+    printf("DEBUG: Received post_data: %.*s\n", (int)post_data_size, post_data);
+            json_object *json_obj = json_tokener_parse(post_data);
+    printf("DEBUG: JSON parse result: %p\n", (void*)json_obj);
+            if (!json_obj) {
+        struct MHD_Response *response = create_error_response("Invalid JSON", MHD_HTTP_BAD_REQUEST);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_BAD_REQUEST, response);
+                MHD_destroy_response(response);
+                return ret;
+            }
             
-            const char *error_msg = "{\"error\": \"Missing required fields\"}";
-            struct MHD_Response *response = MHD_create_response_from_buffer(strlen(error_msg), 
-                                                                           (void *)error_msg, 
-                                                                           MHD_RESPMEM_MUST_COPY);
-            enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_BAD_REQUEST, response);
-            MHD_destroy_response(response);
-            json_object_put(json_obj);
-            return ret;
-        }
-
-        // Get values
-        const char *name1 = json_object_get_string(name1_obj);
-        double lat1 = json_object_get_double(lat1_obj);
-        double lon1 = json_object_get_double(lon1_obj);
-        const char *name2 = json_object_get_string(name2_obj);
-        double lat2 = json_object_get_double(lat2_obj);
-        double lon2 = json_object_get_double(lon2_obj);
-
-        // Calculate distance (using coordinate_logger.c function)
-        double distance = haversine_distance(lat1, lon1, lat2, lon2);
-
-        // Connect to database and save (using coordinate_logger.c function)
+            json_object *username_obj, *password_obj;
+            if (!json_object_object_get_ex(json_obj, "username", &username_obj) ||
+                !json_object_object_get_ex(json_obj, "password", &password_obj)) {
+        struct MHD_Response *response = create_error_response("Username and password required", MHD_HTTP_BAD_REQUEST);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_BAD_REQUEST, response);
+                MHD_destroy_response(response);
+                json_object_put(json_obj);
+                return ret;
+            }
+            
+            const char* username = json_object_get_string(username_obj);
+            const char* password = json_object_get_string(password_obj);
+            
+            char* user_id = register_user(username, password);
+    printf("DEBUG: register_user returned: %s\n", user_id ? user_id : "NULL");
+            
+            if (!user_id) {
+        // Check if it's because user already exists
         PGconn *conn = PQconnectdb(CONN_STR);
-        if (PQstatus(conn) != CONNECTION_OK) {
-            const char *error_msg = "{\"error\": \"Database connection failed\"}";
-            struct MHD_Response *response = MHD_create_response_from_buffer(strlen(error_msg), 
-                                                                           (void *)error_msg, 
-                                                                           MHD_RESPMEM_MUST_COPY);
-            enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_INTERNAL_SERVER_ERROR, response);
-            MHD_destroy_response(response);
+        if (PQstatus(conn) == CONNECTION_OK) {
+            char query[512];
+            snprintf(query, sizeof(query), 
+                     "SELECT id FROM users WHERE username = '%s';", username);
+            
+            PGresult *res = PQexec(conn, query);
+            if (PQresultStatus(res) == PGRES_TUPLES_OK && PQntuples(res) > 0) {
+                // User already exists
+                struct MHD_Response *response = create_error_response("Username already exists", MHD_HTTP_CONFLICT);
+                enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_CONFLICT, response);
+                MHD_destroy_response(response);
+                PQclear(res);
+                PQfinish(conn);
+                json_object_put(json_obj);
+                return ret;
+            }
+            PQclear(res);
             PQfinish(conn);
-            json_object_put(json_obj);
-            return ret;
         }
-
-        save_location_pair_to_db(conn, name1, lat1, lon1, name2, lat2, lon2, distance);
-        PQfinish(conn);
-
-        // Create JSON response
-        char response_str[256];
-        snprintf(response_str, sizeof(response_str), 
-                 "{\"distance\": %.2f, \"unit\": \"km\"}", distance);
-
-        struct MHD_Response *response = MHD_create_response_from_buffer(strlen(response_str), 
-                                                                       (void *)response_str, 
-                                                                       MHD_RESPMEM_MUST_COPY);
-        enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
+        
+        struct MHD_Response *response = create_error_response("Failed to register user", MHD_HTTP_INTERNAL_SERVER_ERROR);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_INTERNAL_SERVER_ERROR, response);
         MHD_destroy_response(response);
         json_object_put(json_obj);
-        *upload_data_size = 0; // Mark data as processed
         return ret;
     }
-
-    return MHD_YES;
-}
-
-int main() {
-    struct MHD_Daemon *daemon;
-
-    daemon = MHD_start_daemon(MHD_USE_INTERNAL_POLLING_THREAD, PORT, NULL, NULL,
-                              &handle_request, NULL, MHD_OPTION_END);
-    if (NULL == daemon) {
-        fprintf(stderr, "Failed to start daemon\n");
-        return 1;
+            
+                // Create success response
+    printf("DEBUG: Creating success response\n");
+    const char *response_text = "{\"success\": \"User registered successfully\"}";
+    
+    struct MHD_Response *response = MHD_create_response_from_buffer(strlen(response_text), 
+                                                                   (void *)response_text, 
+                                                                   MHD_RESPMEM_PERSISTENT);
+    MHD_add_response_header(response, "Content-Type", "application/json");
+    MHD_add_response_header(response, "Access-Control-Allow-Origin", "*");
+    MHD_add_response_header(response, "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    MHD_add_response_header(response, "Access-Control-Allow-Headers", "Content-Type, Authorization");
+    MHD_add_response_header(response, "Access-Control-Allow-Credentials", "true");
+    
+    enum MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
+    printf("DEBUG: Queued success response, result: %d\n", ret);
+    
+    // Clean up
+    json_object_put(json_obj);
+    free(user_id);
+    
+    // Return the result from MHD_queue_response
+    return ret;
     }
-
-    printf("Server running on port %d\n", PORT);
-    printf("POST requests to http://localhost:%d/calculate-distance\n", PORT);
-    printf("Map UI available at http://localhost:%d/\n", PORT);
-    printf("API endpoint for coordinates: http://localhost:%d/api/coordinates\n", PORT);
-    printf("Example JSON payload:\n");
-    printf("{\n");
-    printf("  \"name1\": \"Istanbul\",\n");
-    printf("  \"lat1\": 41.0151,\n");
-    printf("  \"lon1\": 28.9795,\n");
-    printf("  \"name2\": \"Ankara\",\n");
-    printf("  \"lat2\": 39.9334,\n");
-    printf("  \"lon2\": 32.8597\n");
-    printf("}\n");
-    printf("Press enter to stop the server...\n");
-    getchar();
-
-    MHD_stop_daemon(daemon);
-    return 0;
+    
+// Handle user login
+enum MHD_Result handle_post_login(struct MHD_Connection *connection, const char *post_data, size_t post_data_size) {
+            json_object *json_obj = json_tokener_parse(post_data);
+            if (!json_obj) {
+        struct MHD_Response *response = create_error_response("Invalid JSON", MHD_HTTP_BAD_REQUEST);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_BAD_REQUEST, response);
+                MHD_destroy_response(response);
+                return ret;
+            }
+            
+            json_object *username_obj, *password_obj;
+            if (!json_object_object_get_ex(json_obj, "username", &username_obj) ||
+                !json_object_object_get_ex(json_obj, "password", &password_obj)) {
+        struct MHD_Response *response = create_error_response("Username and password required", MHD_HTTP_BAD_REQUEST);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_BAD_REQUEST, response);
+                MHD_destroy_response(response);
+                json_object_put(json_obj);
+                return ret;
+            }
+            
+            const char* username = json_object_get_string(username_obj);
+            const char* password = json_object_get_string(password_obj);
+            
+            char* session_token = login_user(username, password);
+            
+            if (!session_token) {
+        struct MHD_Response *response = create_error_response("Invalid username or password", MHD_HTTP_UNAUTHORIZED);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_UNAUTHORIZED, response);
+                MHD_destroy_response(response);
+                json_object_put(json_obj);
+                return ret;
+            }
+            
+            // Create JSON response
+            json_object *response_obj = json_object_new_object();
+            json_object_object_add(response_obj, "session_token", json_object_new_string(session_token));
+            
+            const char *json_str = json_object_to_json_string(response_obj);
+    struct MHD_Response *response = create_json_response(json_str, MHD_HTTP_OK);
+    enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_OK, response);
+            MHD_destroy_response(response);
+            json_object_put(response_obj);
+            json_object_put(json_obj);
+            free(session_token);
+            return ret;
+    }
+    
+// Handle user logout
+enum MHD_Result handle_post_logout(struct MHD_Connection *connection) {
+        const char* session_token = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, "Authorization");
+        if (!session_token || strncmp(session_token, "Bearer ", 7) != 0) {
+        struct MHD_Response *response = create_error_response("Missing or invalid Authorization header", MHD_HTTP_UNAUTHORIZED);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_UNAUTHORIZED, response);
+            MHD_destroy_response(response);
+            return ret;
+        }
+        
+    session_token += 7; // Skip "Bearer " prefix
+        
+        if (logout_user(session_token) != 0) {
+        struct MHD_Response *response = create_error_response("Failed to logout", MHD_HTTP_INTERNAL_SERVER_ERROR);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_INTERNAL_SERVER_ERROR, response);
+            MHD_destroy_response(response);
+            return ret;
+        }
+        
+    struct MHD_Response *response = create_success_response("Logged out successfully", MHD_HTTP_OK);
+    enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_OK, response);
+        MHD_destroy_response(response);
+        return ret;
+    }
+    
+// Handle save location
+enum MHD_Result handle_post_save_location(struct MHD_Connection *connection, const char *post_data, size_t post_data_size) {
+    json_object *json_obj = json_tokener_parse(post_data);
+    if (!json_obj) {
+        struct MHD_Response *response = create_error_response("Invalid JSON", MHD_HTTP_BAD_REQUEST);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_BAD_REQUEST, response);
+            MHD_destroy_response(response);
+            return ret;
+        }
+        
+    json_object *user_id_obj, *lat_obj, *lon_obj, *accuracy_obj;
+    if (!json_object_object_get_ex(json_obj, "user_id", &user_id_obj) ||
+        !json_object_object_get_ex(json_obj, "latitude", &lat_obj) ||
+        !json_object_object_get_ex(json_obj, "longitude", &lon_obj)) {
+        struct MHD_Response *response = create_error_response("User ID, latitude and longitude required", MHD_HTTP_BAD_REQUEST);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_BAD_REQUEST, response);
+            MHD_destroy_response(response);
+        json_object_put(json_obj);
+            return ret;
+        }
+        
+    const char* user_id = json_object_get_string(user_id_obj);
+    double latitude = json_object_get_double(lat_obj);
+    double longitude = json_object_get_double(lon_obj);
+    int accuracy = 50; // Default accuracy
+    
+    if (json_object_object_get_ex(json_obj, "accuracy", &accuracy_obj)) {
+        accuracy = json_object_get_int(accuracy_obj);
+    }
+    
+    int result = save_user_location(user_id, latitude, longitude, accuracy);
+    
+    if (result != 0) {
+        struct MHD_Response *response = create_error_response("Failed to save location", MHD_HTTP_INTERNAL_SERVER_ERROR);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_INTERNAL_SERVER_ERROR, response);
+            MHD_destroy_response(response);
+        json_object_put(json_obj);
+            return ret;
+        }
+        
+    struct MHD_Response *response = create_success_response("Location saved successfully", MHD_HTTP_OK);
+    enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_OK, response);
+    MHD_destroy_response(response);
+    json_object_put(json_obj);
+    return ret;
 }
+
+// Handle add friend
+enum MHD_Result handle_post_add_friend(struct MHD_Connection *connection, const char *post_data, size_t post_data_size) {
+    json_object *json_obj = json_tokener_parse(post_data);
+    if (!json_obj) {
+        struct MHD_Response *response = create_error_response("Invalid JSON", MHD_HTTP_BAD_REQUEST);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_BAD_REQUEST, response);
+            MHD_destroy_response(response);
+            return ret;
+        }
+        
+    json_object *user_id_obj, *friend_username_obj;
+    if (!json_object_object_get_ex(json_obj, "user_id", &user_id_obj) ||
+        !json_object_object_get_ex(json_obj, "friend_username", &friend_username_obj)) {
+        struct MHD_Response *response = create_error_response("User ID and friend username required", MHD_HTTP_BAD_REQUEST);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_BAD_REQUEST, response);
+        MHD_destroy_response(response);
+        json_object_put(json_obj);
+        return ret;
+    }
+    
+    const char* user_id = json_object_get_string(user_id_obj);
+    const char* friend_username = json_object_get_string(friend_username_obj);
+    
+    int result = add_friend(user_id, friend_username);
+    
+    if (result != 0) {
+        struct MHD_Response *response = create_error_response("Failed to add friend", MHD_HTTP_INTERNAL_SERVER_ERROR);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_INTERNAL_SERVER_ERROR, response);
+        MHD_destroy_response(response);
+        json_object_put(json_obj);
+        return ret;
+    }
+    
+    struct MHD_Response *response = create_success_response("Friend added successfully", MHD_HTTP_OK);
+    enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_OK, response);
+    MHD_destroy_response(response);
+    json_object_put(json_obj);
+    return ret;
+}
+
+// Handle get user info
+enum MHD_Result handle_get_user_info(struct MHD_Connection *connection) {
+        const char* session_token = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, "Authorization");
+        if (!session_token || strncmp(session_token, "Bearer ", 7) != 0) {
+        struct MHD_Response *response = create_error_response("Missing or invalid Authorization header", MHD_HTTP_UNAUTHORIZED);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_UNAUTHORIZED, response);
+            MHD_destroy_response(response);
+            return ret;
+        }
+        
+    session_token += 7; // Skip "Bearer " prefix
+        
+        char* user_id = NULL;
+        if (validate_session_token(session_token, &user_id) != 0) {
+        struct MHD_Response *response = create_error_response("Invalid or expired session token", MHD_HTTP_UNAUTHORIZED);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_UNAUTHORIZED, response);
+            MHD_destroy_response(response);
+            return ret;
+        }
+        
+    // Get user info from database
+    PGconn *conn = PQconnectdb(CONN_STR);
+    if (PQstatus(conn) != CONNECTION_OK) {
+        fprintf(stderr, "Database connection failed: %s", PQerrorMessage(conn));
+        PQfinish(conn);
+            free(user_id);
+        struct MHD_Response *response = create_error_response("Database connection failed", MHD_HTTP_INTERNAL_SERVER_ERROR);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_INTERNAL_SERVER_ERROR, response);
+        MHD_destroy_response(response);
+            return ret;
+        }
+        
+    char query[512];
+    snprintf(query, sizeof(query), 
+             "SELECT username FROM users WHERE id = %s;", user_id);
+    
+    PGresult *res = PQexec(conn, query);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        fprintf(stderr, "Query failed: %s", PQerrorMessage(conn));
+        PQclear(res);
+        PQfinish(conn);
+        free(user_id);
+        struct MHD_Response *response = create_error_response("Failed to retrieve user info", MHD_HTTP_INTERNAL_SERVER_ERROR);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_INTERNAL_SERVER_ERROR, response);
+            MHD_destroy_response(response);
+        return ret;
+    }
+    
+    if (PQntuples(res) == 0) {
+        PQclear(res);
+        PQfinish(conn);
+            free(user_id);
+        struct MHD_Response *response = create_error_response("User not found", MHD_HTTP_NOT_FOUND);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_NOT_FOUND, response);
+        MHD_destroy_response(response);
+            return ret;
+        }
+    
+    const char* username = PQgetvalue(res, 0, 0);
+        
+        // Create JSON response
+    json_object *response_obj = json_object_new_object();
+    json_object_object_add(response_obj, "user_id", json_object_new_string(user_id));
+    json_object_object_add(response_obj, "username", json_object_new_string(username));
+    
+    const char *json_str = json_object_to_json_string(response_obj);
+    struct MHD_Response *response = create_json_response(json_str, MHD_HTTP_OK);
+    enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_OK, response);
+        MHD_destroy_response(response);
+    json_object_put(response_obj);
+    PQclear(res);
+    PQfinish(conn);
+        free(user_id);
+        return ret;
+    }
+    
+// Handle get friends
+enum MHD_Result handle_get_friends(struct MHD_Connection *connection) {
+        const char* session_token = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, "Authorization");
+        if (!session_token || strncmp(session_token, "Bearer ", 7) != 0) {
+        struct MHD_Response *response = create_error_response("Missing or invalid Authorization header", MHD_HTTP_UNAUTHORIZED);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_UNAUTHORIZED, response);
+            MHD_destroy_response(response);
+            return ret;
+        }
+        
+    session_token += 7; // Skip "Bearer " prefix
+        
+        char* user_id = NULL;
+        if (validate_session_token(session_token, &user_id) != 0) {
+        struct MHD_Response *response = create_error_response("Invalid or expired session token", MHD_HTTP_UNAUTHORIZED);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_UNAUTHORIZED, response);
+            MHD_destroy_response(response);
+            return ret;
+        }
+        
+        json_object *friends = get_friends_list(user_id);
+        
+        if (!friends) {
+        struct MHD_Response *response = create_error_response("Failed to retrieve friends list", MHD_HTTP_INTERNAL_SERVER_ERROR);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_INTERNAL_SERVER_ERROR, response);
+            MHD_destroy_response(response);
+            free(user_id);
+            return ret;
+        }
+        
+        const char *json_str = json_object_to_json_string(friends);
+    struct MHD_Response *response = create_json_response(json_str, MHD_HTTP_OK);
+    enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_OK, response);
+        MHD_destroy_response(response);
+        json_object_put(friends);
+        free(user_id);
+        return ret;
+    }
+    
+// Handle get friends locations
+enum MHD_Result handle_get_friends_locations(struct MHD_Connection *connection) {
+        const char* session_token = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, "Authorization");
+        if (!session_token || strncmp(session_token, "Bearer ", 7) != 0) {
+        struct MHD_Response *response = create_error_response("Missing or invalid Authorization header", MHD_HTTP_UNAUTHORIZED);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_UNAUTHORIZED, response);
+            MHD_destroy_response(response);
+            return ret;
+        }
+        
+    session_token += 7; // Skip "Bearer " prefix
+        
+        char* user_id = NULL;
+        if (validate_session_token(session_token, &user_id) != 0) {
+        struct MHD_Response *response = create_error_response("Invalid or expired session token", MHD_HTTP_UNAUTHORIZED);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_UNAUTHORIZED, response);
+            MHD_destroy_response(response);
+            return ret;
+        }
+        
+        json_object *locations = get_friends_locations_from_db(user_id);
+        
+        if (!locations) {
+        struct MHD_Response *response = create_error_response("Failed to retrieve friends locations", MHD_HTTP_INTERNAL_SERVER_ERROR);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_INTERNAL_SERVER_ERROR, response);
+            MHD_destroy_response(response);
+            free(user_id);
+            return ret;
+        }
+        
+        const char *json_str = json_object_to_json_string(locations);
+    struct MHD_Response *response = create_json_response(json_str, MHD_HTTP_OK);
+    enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_OK, response);
+        MHD_destroy_response(response);
+        json_object_put(locations);
+        free(user_id);
+        return ret;
+    }
+    
+// Handle get route
+enum MHD_Result handle_get_route(struct MHD_Connection *connection) {
+        const char* session_token = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, "Authorization");
+        if (!session_token || strncmp(session_token, "Bearer ", 7) != 0) {
+        struct MHD_Response *response = create_error_response("Missing or invalid Authorization header", MHD_HTTP_UNAUTHORIZED);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_UNAUTHORIZED, response);
+            MHD_destroy_response(response);
+            return ret;
+        }
+        
+    session_token += 7; // Skip "Bearer " prefix
+        
+        char* user_id = NULL;
+        if (validate_session_token(session_token, &user_id) != 0) {
+        struct MHD_Response *response = create_error_response("Invalid or expired session token", MHD_HTTP_UNAUTHORIZED);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_UNAUTHORIZED, response);
+            MHD_destroy_response(response);
+            return ret;
+        }
+        
+        const char* start_lat_str = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "start_lat");
+        const char* start_lon_str = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "start_lon");
+        const char* end_id = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "end_id");
+        
+        if (!start_lat_str || !start_lon_str || !end_id) {
+        struct MHD_Response *response = create_error_response("start_lat, start_lon, and end_id query parameters required", MHD_HTTP_BAD_REQUEST);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_BAD_REQUEST, response);
+            MHD_destroy_response(response);
+            free(user_id);
+            return ret;
+        }
+        
+        double start_lat = atof(start_lat_str);
+        double start_lon = atof(start_lon_str);
+        
+    json_object *route = calculate_route(start_lat, start_lon, end_id);
+    
+    if (!route) {
+        struct MHD_Response *response = create_error_response("Failed to calculate route", MHD_HTTP_INTERNAL_SERVER_ERROR);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_INTERNAL_SERVER_ERROR, response);
+            MHD_destroy_response(response);
+            free(user_id);
+            return ret;
+        }
+        
+    const char *json_str = json_object_to_json_string(route);
+    struct MHD_Response *response = create_json_response(json_str, MHD_HTTP_OK);
+    enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_OK, response);
+            MHD_destroy_response(response);
+    json_object_put(route);
+            free(user_id);
+            return ret;
+        }
+        
+// Handle get H3 distance
+enum MHD_Result handle_get_h3_distance(struct MHD_Connection *connection) {
+    const char* session_token = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, "Authorization");
+    if (!session_token || strncmp(session_token, "Bearer ", 7) != 0) {
+        struct MHD_Response *response = create_error_response("Missing or invalid Authorization header", MHD_HTTP_UNAUTHORIZED);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_UNAUTHORIZED, response);
+        MHD_destroy_response(response);
+        return ret;
+    }
+    
+    session_token += 7; // Skip "Bearer " prefix
+    
+    char* user_id = NULL;
+    if (validate_session_token(session_token, &user_id) != 0) {
+        struct MHD_Response *response = create_error_response("Invalid or expired session token", MHD_HTTP_UNAUTHORIZED);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_UNAUTHORIZED, response);
+        MHD_destroy_response(response);
+        return ret;
+    }
+    
+    const char* user1_id = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "user1");
+    const char* user2_id = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "user2");
+    
+    if (!user1_id || !user2_id) {
+        struct MHD_Response *response = create_error_response("user1 and user2 query parameters required", MHD_HTTP_BAD_REQUEST);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_BAD_REQUEST, response);
+            MHD_destroy_response(response);
+            free(user_id);
+            return ret;
+        }
+        
+    double distance = calculate_h3_distance(user1_id, user2_id);
+    
+    if (distance < 0) {
+        struct MHD_Response *response = create_error_response("Failed to calculate H3 distance", MHD_HTTP_INTERNAL_SERVER_ERROR);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_INTERNAL_SERVER_ERROR, response);
+        MHD_destroy_response(response);
+        free(user_id);
+        return ret;
+    }
+    
+    char response_str[256];
+    snprintf(response_str, sizeof(response_str), 
+             "{\"distance\": %.2f, \"unit\": \"meters\", \"algorithm\": \"H3\"}", distance);
+    
+    struct MHD_Response *response = create_json_response(response_str, MHD_HTTP_OK);
+    enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_OK, response);
+    MHD_destroy_response(response);
+    free(user_id);
+    return ret;
+}
+
+// Handle get A* distance
+enum MHD_Result handle_get_astar_distance(struct MHD_Connection *connection) {
+    const char* session_token = MHD_lookup_connection_value(connection, MHD_HEADER_KIND, "Authorization");
+    if (!session_token || strncmp(session_token, "Bearer ", 7) != 0) {
+        struct MHD_Response *response = create_error_response("Missing or invalid Authorization header", MHD_HTTP_UNAUTHORIZED);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_UNAUTHORIZED, response);
+        MHD_destroy_response(response);
+        return ret;
+    }
+    
+    session_token += 7; // Skip "Bearer " prefix
+    
+    char* user_id = NULL;
+    if (validate_session_token(session_token, &user_id) != 0) {
+        struct MHD_Response *response = create_error_response("Invalid or expired session token", MHD_HTTP_UNAUTHORIZED);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_UNAUTHORIZED, response);
+        MHD_destroy_response(response);
+        return ret;
+    }
+    
+    const char* user1_id = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "user1");
+    const char* user2_id = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "user2");
+    
+    if (!user1_id || !user2_id) {
+        struct MHD_Response *response = create_error_response("user1 and user2 query parameters required", MHD_HTTP_BAD_REQUEST);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_BAD_REQUEST, response);
+        MHD_destroy_response(response);
+        free(user_id);
+        return ret;
+    }
+    
+    double distance = calculate_astar_distance(user1_id, user2_id);
+    
+    if (distance < 0) {
+        struct MHD_Response *response = create_error_response("Failed to calculate A* distance", MHD_HTTP_INTERNAL_SERVER_ERROR);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_INTERNAL_SERVER_ERROR, response);
+        MHD_destroy_response(response);
+        free(user_id);
+        return ret;
+    }
+    
+    char response_str[256];
+    snprintf(response_str, sizeof(response_str), 
+             "{\"distance\": %.2f, \"unit\": \"meters\", \"algorithm\": \"A*\"}", distance);
+    
+    struct MHD_Response *response = create_json_response(response_str, MHD_HTTP_OK);
+    enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_OK, response);
+    MHD_destroy_response(response);
+    free(user_id);
+    return ret;
+}
+
+// Handle calculate distance (legacy endpoint)
+enum MHD_Result handle_post_calculate_distance(struct MHD_Connection *connection, const char *post_data, size_t post_data_size) {
+    json_object *json_obj = json_tokener_parse(post_data);
+            if (!json_obj) {
+        struct MHD_Response *response = create_error_response("Invalid JSON", MHD_HTTP_BAD_REQUEST);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_BAD_REQUEST, response);
+                MHD_destroy_response(response);
+                return ret;
+            }
+
+            json_object *name1_obj, *lat1_obj, *lon1_obj, *name2_obj, *lat2_obj, *lon2_obj;
+            if (!json_object_object_get_ex(json_obj, "name1", &name1_obj) ||
+                !json_object_object_get_ex(json_obj, "lat1", &lat1_obj) ||
+                !json_object_object_get_ex(json_obj, "lon1", &lon1_obj) ||
+                !json_object_object_get_ex(json_obj, "name2", &name2_obj) ||
+                !json_object_object_get_ex(json_obj, "lat2", &lat2_obj) ||
+                !json_object_object_get_ex(json_obj, "lon2", &lon2_obj)) {
+                
+        struct MHD_Response *response = create_error_response("Missing required fields", MHD_HTTP_BAD_REQUEST);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_BAD_REQUEST, response);
+                MHD_destroy_response(response);
+                json_object_put(json_obj);
+                return ret;
+            }
+
+            const char *name1 = json_object_get_string(name1_obj);
+            double lat1 = json_object_get_double(lat1_obj);
+            double lon1 = json_object_get_double(lon1_obj);
+            const char *name2 = json_object_get_string(name2_obj);
+            double lat2 = json_object_get_double(lat2_obj);
+            double lon2 = json_object_get_double(lon2_obj);
+
+            double distance = haversine_distance(lat1, lon1, lat2, lon2);
+
+            PGconn *conn = PQconnectdb(CONN_STR);
+            if (PQstatus(conn) != CONNECTION_OK) {
+        struct MHD_Response *response = create_error_response("Database connection failed", MHD_HTTP_INTERNAL_SERVER_ERROR);
+        enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_INTERNAL_SERVER_ERROR, response);
+                MHD_destroy_response(response);
+                PQfinish(conn);
+                json_object_put(json_obj);
+                return ret;
+            }
+
+            save_location_pair_to_db(conn, name1, lat1, lon1, name2, lat2, lon2, distance);
+            PQfinish(conn);
+
+            char response_str[256];
+            snprintf(response_str, sizeof(response_str), 
+                     "{\"distance\": %.2f, \"unit\": \"km\"}", distance);
+
+    struct MHD_Response *response = create_json_response(response_str, MHD_HTTP_OK);
+    enum MHD_Result ret = queue_response_with_cors(connection, MHD_HTTP_OK, response);
+            MHD_destroy_response(response);
+            json_object_put(json_obj);
+            return ret;
+        }

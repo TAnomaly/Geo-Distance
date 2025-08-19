@@ -31,22 +31,7 @@ double haversine_distance(double lat1, double lon1, double lat2, double lon2) {
     return 6371.0 * c; // EARTH_RADIUS
 }
 
-// Convert latitude/longitude to H3 index
-H3Index latlng_to_h3(double lat, double lon, int resolution) {
-    LatLng location;
-    location.lat = degsToRads(lat);
-    location.lng = degsToRads(lon);
-    
-    H3Index index = 0;
-    H3Error err = latLngToCell(&location, resolution, &index);
-    
-    // Return 0 (H3_NULL) if there was an error
-    if (err != E_SUCCESS) {
-        return H3_NULL;
-    }
-    
-    return index;
-}
+// Note: latlng_to_h3 function moved to location.c to avoid conflicts
 
 // Get path between two H3 indexes using A* algorithm
 int get_h3_path(H3Index start, H3Index end, H3Index **path) {
@@ -75,12 +60,113 @@ int get_h3_path(H3Index start, H3Index end, H3Index **path) {
     return (int)pathSize; // Return the size of the path
 }
 
+// A* pathfinding using H3 grid
+typedef struct {
+    H3Index index;
+    double g_score;  // Cost from start to current node
+    double f_score;  // Estimated total cost from start to goal through current node
+} AStarNode;
+
+// Simple priority queue implementation (for demonstration purposes)
+typedef struct {
+    AStarNode* nodes;
+    int size;
+    int capacity;
+} PriorityQueue;
+
+PriorityQueue* create_priority_queue(int capacity) {
+    PriorityQueue* pq = malloc(sizeof(PriorityQueue));
+    pq->nodes = malloc(capacity * sizeof(AStarNode));
+    pq->size = 0;
+    pq->capacity = capacity;
+    return pq;
+}
+
+void destroy_priority_queue(PriorityQueue* pq) {
+    free(pq->nodes);
+    free(pq);
+}
+
+void push_priority_queue(PriorityQueue* pq, AStarNode node) {
+    if (pq->size >= pq->capacity) return;
+    
+    pq->nodes[pq->size++] = node;
+    
+    // Simple bubble up for min-heap based on f_score
+    int i = pq->size - 1;
+    while (i > 0) {
+        int parent = (i - 1) / 2;
+        if (pq->nodes[parent].f_score <= pq->nodes[i].f_score) break;
+        AStarNode temp = pq->nodes[parent];
+        pq->nodes[parent] = pq->nodes[i];
+        pq->nodes[i] = temp;
+        i = parent;
+    }
+}
+
+AStarNode pop_priority_queue(PriorityQueue* pq) {
+    if (pq->size <= 0) {
+        AStarNode empty = {0, 0, 0};
+        return empty;
+    }
+    
+    AStarNode result = pq->nodes[0];
+    pq->nodes[0] = pq->nodes[--pq->size];
+    
+    // Bubble down
+    int i = 0;
+    while (1) {
+        int left = 2 * i + 1;
+        int right = 2 * i + 2;
+        int smallest = i;
+        
+        if (left < pq->size && pq->nodes[left].f_score < pq->nodes[smallest].f_score)
+            smallest = left;
+            
+        if (right < pq->size && pq->nodes[right].f_score < pq->nodes[smallest].f_score)
+            smallest = right;
+            
+        if (smallest == i) break;
+        
+        AStarNode temp = pq->nodes[i];
+        pq->nodes[i] = pq->nodes[smallest];
+        pq->nodes[smallest] = temp;
+        i = smallest;
+    }
+    
+    return result;
+}
+
+// Calculate distance between two H3 indexes using Haversine formula
+double h3_distance(H3Index h1, H3Index h2) {
+    LatLng coord1, coord2;
+    cellToLatLng(h1, &coord1);
+    cellToLatLng(h2, &coord2);
+    
+    // Convert to degrees for haversine calculation
+    double lat1 = radsToDegs(coord1.lat);
+    double lon1 = radsToDegs(coord1.lng);
+    double lat2 = radsToDegs(coord2.lat);
+    double lon2 = radsToDegs(coord2.lng);
+    
+    return haversine_distance(lat1, lon1, lat2, lon2);
+}
+
+// Note: get_astar_path function moved to location.c to avoid conflicts
+
 // Save both locations and distance in a single row, including H3 indices
 void save_location_pair_to_db(PGconn *conn, const char *name1, double lat1, double lon1, 
                               const char *name2, double lat2, double lon2, double distance) {
     // Get H3 indices for both locations (using resolution 9)
-    H3Index h3_1 = latlng_to_h3(lat1, lon1, 9);
-    H3Index h3_2 = latlng_to_h3(lat2, lon2, 9);
+    LatLng location1, location2;
+    location1.lat = degsToRads(lat1);
+    location1.lng = degsToRads(lon1);
+    location2.lat = degsToRads(lat2);
+    location2.lng = degsToRads(lon2);
+    
+    H3Index h3_1, h3_2;
+    latLngToCell(&location1, 9, &h3_1);
+    latLngToCell(&location2, 9, &h3_2);
     
     // Convert H3 indices to strings
     char h3_1_str[17], h3_2_str[17];
