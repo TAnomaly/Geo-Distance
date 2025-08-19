@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Coordinate Map</title>
+    <title>Coordinate Map with H3 Indexing</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -23,7 +23,7 @@
             padding: 15px;
             border-radius: 5px;
             box-shadow: 0 0 10px rgba(0,0,0,0.5);
-            max-width: 300px;
+            max-width: 350px;
         }
         
         .info-panel h3 {
@@ -36,7 +36,7 @@
         }
         
         .coordinate-item {
-            padding: 5px;
+            padding: 8px;
             border-bottom: 1px solid #eee;
         }
         
@@ -48,13 +48,33 @@
             font-weight: bold;
             color: #007acc;
         }
+        
+        .h3-index {
+            font-family: monospace;
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        button {
+            margin-top: 10px;
+            padding: 8px 12px;
+            background-color: #007acc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background-color: #005a9e;
+        }
     </style>
 </head>
 <body>
     <div id="map"></div>
     
     <div class="info-panel">
-        <h3>Coordinate Data</h3>
+        <h3>Coordinate Data with H3 Indexing</h3>
         <div id="coordinates-info">
             <p>Loading coordinates...</p>
         </div>
@@ -105,13 +125,17 @@
                 // Add marker for first location
                 const marker1 = L.marker([coord.first_lat, coord.first_lon])
                     .addTo(map)
-                    .bindPopup(`<b>${coord.first_name}</b><br>(${coord.first_lat}, ${coord.first_lon})`);
+                    .bindPopup(`<b>${coord.first_name}</b><br>
+                                (${coord.first_lat.toFixed(4)}, ${coord.first_lon.toFixed(4)})<br>
+                                H3: ${coord.first_h3}`);
                 markers.push(marker1);
                 
                 // Add marker for second location
                 const marker2 = L.marker([coord.second_lat, coord.second_lon])
                     .addTo(map)
-                    .bindPopup(`<b>${coord.second_name}</b><br>(${coord.second_lat}, ${coord.second_lon})`);
+                    .bindPopup(`<b>${coord.second_name}</b><br>
+                                (${coord.second_lat.toFixed(4)}, ${coord.second_lon.toFixed(4)})<br>
+                                H3: ${coord.second_h3}`);
                 markers.push(marker2);
                 
                 // Draw a line between the two points
@@ -146,6 +170,7 @@
                     <div class="coordinate-item">
                         <div><b>${coord.first_name}</b> to <b>${coord.second_name}</b></div>
                         <div class="distance">Distance: ${coord.distance.toFixed(2)} km</div>
+                        <div class="h3-index">H3: ${coord.first_h3} → ${coord.second_h3}</div>
                     </div>
                 `;
             });

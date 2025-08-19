@@ -3,6 +3,7 @@
 #include <math.h>
 #include <string.h>
 #include <libpq-fe.h>
+#include <h3/h3api.h>
 #include "coordinate_logger.h"
 
 #define CONN_STR "host=localhost dbname=mydb user=myuser password=mypassword"
@@ -30,15 +31,41 @@ double haversine_distance(double lat1, double lon1, double lat2, double lon2) {
     return 6371.0 * c; // EARTH_RADIUS
 }
 
-// Save both locations and distance in a single row
+// Convert latitude/longitude to H3 index
+H3Index latlng_to_h3(double lat, double lon, int resolution) {
+    LatLng location;
+    location.lat = degsToRads(lat);
+    location.lng = degsToRads(lon);
+    
+    H3Index index = 0;
+    H3Error err = latLngToCell(&location, resolution, &index);
+    
+    // Return 0 (H3_NULL) if there was an error
+    if (err != E_SUCCESS) {
+        return H3_NULL;
+    }
+    
+    return index;
+}
+
+// Save both locations and distance in a single row, including H3 indices
 void save_location_pair_to_db(PGconn *conn, const char *name1, double lat1, double lon1, 
                               const char *name2, double lat2, double lon2, double distance) {
-    char query[1024];
+    // Get H3 indices for both locations (using resolution 9)
+    H3Index h3_1 = latlng_to_h3(lat1, lon1, 9);
+    H3Index h3_2 = latlng_to_h3(lat2, lon2, 9);
+    
+    // Convert H3 indices to strings
+    char h3_1_str[17], h3_2_str[17];
+    h3ToString(h3_1, h3_1_str, 17);
+    h3ToString(h3_2, h3_2_str, 17);
+    
+    char query[1200];
     
     snprintf(query, sizeof(query),
-             "INSERT INTO coordinates (first_name, first_lat, first_lon, second_name, second_lat, second_lon, distance) "
-             "VALUES ('%s', %f, %f, '%s', %f, %f, %f);",
-             name1, lat1, lon1, name2, lat2, lon2, distance);
+             "INSERT INTO coordinates (first_name, first_lat, first_lon, first_h3, second_name, second_lat, second_lon, second_h3, distance) "
+             "VALUES ('%s', %f, %f, '%s', '%s', %f, %f, '%s', %f);",
+             name1, lat1, lon1, h3_1_str, name2, lat2, lon2, h3_2_str, distance);
 
     PGresult *res = PQexec(conn, query);
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {

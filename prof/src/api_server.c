@@ -54,7 +54,7 @@ json_object* get_coordinates_from_db() {
         return NULL;
     }
     
-    const char *query = "SELECT first_name, first_lat, first_lon, second_name, second_lat, second_lon, distance FROM coordinates ORDER BY id DESC LIMIT 100;";
+    const char *query = "SELECT first_name, first_lat, first_lon, first_h3, second_name, second_lat, second_lon, second_h3, distance FROM coordinates ORDER BY id DESC LIMIT 100;";
     PGresult *res = PQexec(conn, query);
     
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
@@ -73,10 +73,12 @@ json_object* get_coordinates_from_db() {
         json_object_object_add(coord_obj, "first_name", json_object_new_string(PQgetvalue(res, i, 0)));
         json_object_object_add(coord_obj, "first_lat", json_object_new_double(atof(PQgetvalue(res, i, 1))));
         json_object_object_add(coord_obj, "first_lon", json_object_new_double(atof(PQgetvalue(res, i, 2))));
-        json_object_object_add(coord_obj, "second_name", json_object_new_string(PQgetvalue(res, i, 3)));
-        json_object_object_add(coord_obj, "second_lat", json_object_new_double(atof(PQgetvalue(res, i, 4))));
-        json_object_object_add(coord_obj, "second_lon", json_object_new_double(atof(PQgetvalue(res, i, 5))));
-        json_object_object_add(coord_obj, "distance", json_object_new_double(atof(PQgetvalue(res, i, 6))));
+        json_object_object_add(coord_obj, "first_h3", json_object_new_string(PQgetvalue(res, i, 3)));
+        json_object_object_add(coord_obj, "second_name", json_object_new_string(PQgetvalue(res, i, 4)));
+        json_object_object_add(coord_obj, "second_lat", json_object_new_double(atof(PQgetvalue(res, i, 5))));
+        json_object_object_add(coord_obj, "second_lon", json_object_new_double(atof(PQgetvalue(res, i, 6))));
+        json_object_object_add(coord_obj, "second_h3", json_object_new_string(PQgetvalue(res, i, 7)));
+        json_object_object_add(coord_obj, "distance", json_object_new_double(atof(PQgetvalue(res, i, 8))));
         
         json_object_array_add(coordinates_array, coord_obj);
     }

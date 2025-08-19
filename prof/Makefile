@@ -2,9 +2,9 @@
 
 # Compiler and flags
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c99 -I/usr/include/postgresql -I/usr/include/json-c -Isrc
-LIBS_LOGGER = -lpq -lm
-LIBS_API = -lpq -lm -ljson-c -lmicrohttpd
+CFLAGS = -Wall -Wextra -std=c99 -I/usr/include/postgresql -I/usr/include/json-c -I/usr/local/include -Isrc
+LIBS_LOGGER = -lpq -lm -lh3
+LIBS_API = -lpq -lm -ljson-c -lmicrohttpd -lh3
 
 # Directories
 SRC_DIR = src
