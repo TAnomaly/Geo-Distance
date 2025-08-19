@@ -198,6 +198,7 @@
             border-radius: 6px;
             font-size: 0.85rem;
             border: 1px solid #b2f5ea;
+            margin-bottom: 10px;
         }
         
         .h3-label {
@@ -208,6 +209,26 @@
         .h3-value {
             font-family: monospace;
             color: #234e52;
+            font-weight: 500;
+        }
+        
+        .path-info {
+            background: #fff3e0;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            border: 1px solid #ffe0b2;
+            margin-bottom: 10px;
+        }
+        
+        .path-label {
+            font-weight: 600;
+            color: #e65100;
+        }
+        
+        .path-value {
+            font-family: monospace;
+            color: #e65100;
             font-weight: 500;
         }
         
@@ -360,6 +381,39 @@
             background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
         }
         
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            font-size: 0.9rem;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 4px;
+            margin-right: 10px;
+            border-radius: 2px;
+        }
+        
+        .h3-path-color {
+            background: #ff6b6b;
+        }
+        
+        .direct-line-color {
+            background: #667eea;
+        }
+        
         @media (max-width: 768px) {
             .info-panel {
                 top: 80px;
@@ -471,6 +525,17 @@
         </div>
     </div>
     
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-color h3-path-color"></div>
+            <div>H3 Path (A* Algorithm)</div>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color direct-line-color"></div>
+            <div>Direct Line</div>
+        </div>
+    </div>
+    
     <div class="notification" id="notification"></div>
 
     <!-- Leaflet JS -->
@@ -485,9 +550,10 @@
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
         
-        // Store markers and polylines
+        // Store markers, polylines, and H3 paths
         const markers = [];
-        const polylines = [];
+        const directLines = [];
+        const h3Paths = [];
         
         // Show notification
         function showNotification(message, type = 'success') {
@@ -522,13 +588,15 @@
         
         // Function to update the map with new coordinates
         function updateMap(coordinates) {
-            // Clear existing markers and polylines
+            // Clear existing markers, lines, and paths
             markers.forEach(marker => map.removeLayer(marker));
-            polylines.forEach(polyline => map.removeLayer(polyline));
+            directLines.forEach(line => map.removeLayer(line));
+            h3Paths.forEach(path => map.removeLayer(path));
             markers.length = 0;
-            polylines.length = 0;
+            directLines.length = 0;
+            h3Paths.length = 0;
             
-            // Add new markers
+            // Add new markers and lines
             coordinates.forEach(coord => {
                 // Add marker for first location
                 const marker1 = L.marker([coord.first_lat, coord.first_lon])
@@ -554,16 +622,42 @@
                     `);
                 markers.push(marker2);
                 
-                // Draw a line between the two points
-                const polyline = L.polyline([
+                // Draw direct line between the two points
+                const directLine = L.polyline([
                     [coord.first_lat, coord.first_lon],
                     [coord.second_lat, coord.second_lon]
                 ], {
                     color: '#667eea',
                     weight: 3,
-                    opacity: 0.7
+                    opacity: 0.7,
+                    dashArray: '10, 10'
                 }).addTo(map);
-                polylines.push(polyline);
+                directLines.push(directLine);
+                
+                // Draw H3 path if available
+                if (coord.h3_path && coord.h3_path.length > 0) {
+                    const pathPoints = coord.h3_path.map(point => [point.lat, point.lng]);
+                    const h3Path = L.polyline(pathPoints, {
+                        color: '#ff6b6b',
+                        weight: 4,
+                        opacity: 0.8
+                    }).addTo(map);
+                    h3Paths.push(h3Path);
+                    
+                    // Add markers for path points (every 5th point to avoid clutter)
+                    for (let i = 0; i < coord.h3_path.length; i += 5) {
+                        const point = coord.h3_path[i];
+                        const pathMarker = L.circleMarker([point.lat, point.lng], {
+                            radius: 3,
+                            fillColor: '#ff6b6b',
+                            color: '#fff',
+                            weight: 1,
+                            opacity: 1,
+                            fillOpacity: 0.8
+                        }).addTo(map);
+                        markers.push(pathMarker);
+                    }
+                }
             });
             
             // Fit map to bounds if we have markers
@@ -585,6 +679,26 @@
             let html = '<div class="coordinates-list">';
             
             coordinates.forEach(coord => {
+                // Calculate path length if available
+                let pathInfo = '';
+                if (coord.h3_path && coord.h3_path.length > 0) {
+                    // Calculate approximate path distance (sum of distances between consecutive points)
+                    let pathDistance = 0;
+                    for (let i = 1; i < coord.h3_path.length; i++) {
+                        const prev = coord.h3_path[i-1];
+                        const curr = coord.h3_path[i];
+                        // Simple distance calculation (inaccurate but for display purposes)
+                        const dist = Math.sqrt(Math.pow(curr.lat - prev.lat, 2) + Math.pow(curr.lng - prev.lng, 2));
+                        pathDistance += dist;
+                    }
+                    pathInfo = `
+                        <div class="path-info">
+                            <span class="path-label">H3 Path Length:</span>
+                            <span class="path-value">${coord.h3_path.length} cells</span>
+                        </div>
+                    `;
+                }
+                
                 html += `
                     <div class="coordinate-item" onclick="zoomToCoordinate(${coord.first_lat}, ${coord.first_lon}, ${coord.second_lat}, ${coord.second_lon})">
                         <div class="location-names">
@@ -610,6 +724,8 @@
                             <span class="h3-label">→</span>
                             <span class="h3-value">${coord.second_h3}</span>
                         </div>
+                        
+                        ${pathInfo}
                     </div>
                 `;
             });

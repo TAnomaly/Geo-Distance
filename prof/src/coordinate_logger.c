@@ -48,6 +48,33 @@ H3Index latlng_to_h3(double lat, double lon, int resolution) {
     return index;
 }
 
+// Get path between two H3 indexes using A* algorithm
+int get_h3_path(H3Index start, H3Index end, H3Index **path) {
+    // First get the size of the path
+    int64_t pathSize;
+    H3Error err = gridPathCellsSize(start, end, &pathSize);
+    
+    if (err != E_SUCCESS) {
+        return -1; // Error occurred
+    }
+    
+    // Allocate memory for the path
+    *path = (H3Index*) malloc(pathSize * sizeof(H3Index));
+    if (*path == NULL) {
+        return -2; // Memory allocation failed
+    }
+    
+    // Get the actual path
+    err = gridPathCells(start, end, *path);
+    if (err != E_SUCCESS) {
+        free(*path);
+        *path = NULL;
+        return -1; // Error occurred
+    }
+    
+    return (int)pathSize; // Return the size of the path
+}
+
 // Save both locations and distance in a single row, including H3 indices
 void save_location_pair_to_db(PGconn *conn, const char *name1, double lat1, double lon1, 
                               const char *name2, double lat2, double lon2, double distance) {

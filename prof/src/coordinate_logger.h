@@ -7,6 +7,7 @@
 // Function declarations
 double haversine_distance(double lat1, double lon1, double lat2, double lon2);
 H3Index latlng_to_h3(double lat, double lon, int resolution);
+int get_h3_path(H3Index start, H3Index end, H3Index **path);
 void save_location_pair_to_db(PGconn *conn, const char *name1, double lat1, double lon1, 
                               const char *name2, double lat2, double lon2, double distance);
 

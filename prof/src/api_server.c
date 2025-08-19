@@ -80,6 +80,51 @@ json_object* get_coordinates_from_db() {
         json_object_object_add(coord_obj, "second_h3", json_object_new_string(PQgetvalue(res, i, 7)));
         json_object_object_add(coord_obj, "distance", json_object_new_double(atof(PQgetvalue(res, i, 8))));
         
+        // Convert H3 strings back to H3Index for path calculation
+        H3Index first_h3, second_h3;
+        H3Error err1 = stringToH3(PQgetvalue(res, i, 3), &first_h3);
+        H3Error err2 = stringToH3(PQgetvalue(res, i, 7), &second_h3);
+        
+        if (err1 == E_SUCCESS && err2 == E_SUCCESS) {
+            // Calculate path between H3 indexes
+            H3Index *path = NULL;
+            int pathSize = get_h3_path(first_h3, second_h3, &path);
+            
+            if (pathSize > 0 && path != NULL) {
+                // Create JSON array for path
+                json_object *path_array = json_object_new_array();
+                
+                // Convert each H3 index in path to lat/lng and add to JSON array
+                for (int j = 0; j < pathSize; j++) {
+                    LatLng latLng;
+                    H3Error err = cellToLatLng(path[j], &latLng);
+                    if (err == E_SUCCESS) {
+                        json_object *point_obj = json_object_new_object();
+                        json_object_object_add(point_obj, "lat", json_object_new_double(radsToDegs(latLng.lat)));
+                        json_object_object_add(point_obj, "lng", json_object_new_double(radsToDegs(latLng.lng)));
+                        
+                        // Convert H3 index to string for display
+                        char h3_str[17];
+                        h3ToString(path[j], h3_str, 17);
+                        json_object_object_add(point_obj, "h3", json_object_new_string(h3_str));
+                        
+                        json_object_array_add(path_array, point_obj);
+                    }
+                }
+                
+                json_object_object_add(coord_obj, "h3_path", path_array);
+                free(path);
+            } else {
+                // If path calculation failed, add empty array
+                json_object *path_array = json_object_new_array();
+                json_object_object_add(coord_obj, "h3_path", path_array);
+            }
+        } else {
+            // If H3 conversion failed, add empty array
+            json_object *path_array = json_object_new_array();
+            json_object_object_add(coord_obj, "h3_path", path_array);
+        }
+        
         json_object_array_add(coordinates_array, coord_obj);
     }
     
